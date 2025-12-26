@@ -5,6 +5,10 @@
       "destination": "/privacy.html"
     },
     {
+      "source": "/privacy/",
+      "destination": "/privacy.html"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     }
