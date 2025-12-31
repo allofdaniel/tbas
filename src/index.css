@@ -4608,6 +4608,131 @@ html, body, #root {
   padding: 0 20px;
 }
 
+/* ========================================
+   Flight Status Section
+   ======================================== */
+.flight-status-section .status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.flight-status-section .status-item:last-child {
+  margin-bottom: 0;
+}
+
+.flight-status-section .status-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.flight-status-section .status-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+}
+
+.flight-status-section .flight-phase .status-value {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Airspace chips */
+.status-value-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.airspace-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  border-left: 3px solid;
+  font-size: 12px;
+}
+
+.airspace-type {
+  font-weight: 700;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.airspace-name {
+  flex: 1;
+  color: white;
+}
+
+.airspace-freq {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #4CAF50;
+  font-size: 11px;
+}
+
+/* Procedure info */
+.status-value.procedure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.procedure-type {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(255, 193, 7, 0.2);
+  color: #FFC107;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Waypoint list */
+.waypoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.waypoint-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+}
+
+.waypoint-ident {
+  font-weight: 700;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #64b5f6;
+  min-width: 60px;
+}
+
+.waypoint-dist {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 55px;
+}
+
+.waypoint-eta {
+  font-size: 11px;
+  color: #4CAF50;
+  background: rgba(76, 175, 80, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
 /* Aircraft panel specific section styles */
 .aircraft-info-section.collapsible,
 .aircraft-schedule-section.collapsible,
