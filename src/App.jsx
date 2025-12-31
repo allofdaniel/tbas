@@ -1173,7 +1173,7 @@ function App() {
           const trail = trails[ac.hex];
           const last = trail[trail.length - 1];
           if (!last || last.lat !== ac.lat || last.lon !== ac.lon) {
-            trail.push({ lat: ac.lat, lon: ac.lon, altitude_m: ac.altitude_m, timestamp: ac.timestamp });
+            trail.push({ lat: ac.lat, lon: ac.lon, altitude_m: ac.altitude_m, altitude_ft: ac.altitude_ft, timestamp: ac.timestamp });
           }
           while (trail.length > 0 && Date.now() - trail[0].timestamp > trailDuration) trail.shift();
         });
