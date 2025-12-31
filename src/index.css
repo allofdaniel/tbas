@@ -4553,8 +4553,13 @@ html, body, #root {
   top: 70px !important;
   height: calc(100vh - 80px) !important;
   max-height: calc(100vh - 80px) !important;
-  right: 10px !important;
   border-radius: 12px !important;
+  pointer-events: none;
+}
+
+.aircraft-panel.open {
+  right: 10px !important;
+  pointer-events: auto;
 }
 
 .aircraft-panel-content {
