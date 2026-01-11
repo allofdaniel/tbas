@@ -1,16 +1,123 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+﻿import React, { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoiYWxsb2ZkYW5pZWwiLCJhIjoiY21pbzY5ejhkMDJvZzNjczVwMmlhYTljaiJ9.eSoww-z9bQuolQ4fQHqZOg';
+// Import constants
+import {
+  MAPBOX_ACCESS_TOKEN,
+  IS_PRODUCTION,
+  AIRCRAFT_UPDATE_INTERVAL,
+  NOTAM_CACHE_DURATION,
+  TRAIL_COLOR,
+  TRAIL_DURATION_OPTIONS,
+  getAircraftApiUrl,
+  getAircraftTraceUrl,
+  AIRCRAFT_MODEL_MAP,
+  MAP_STYLES,
+  PROCEDURE_CHARTS,
+} from './constants/config';
 
-const IS_PRODUCTION = import.meta.env.PROD;
-const AIRCRAFT_UPDATE_INTERVAL = 2000;
+import {
+  AIRPORT_DATABASE,
+  COUNTRY_INFO,
+  AIRPORT_TYPE_LABELS,
+  AIRPORT_COORDINATES,
+  KOREA_AIRPORTS,
+  getAirportInfo,
+  getAirportName,
+  getAirportCoordinates,
+} from './constants/airports';
 
-// NOTAM Cache settings - 메모리 캐시 사용 (localStorage는 용량 초과로 실패)
-const NOTAM_CACHE_DURATION = 10 * 60 * 1000; // 10분 캐시 유지
+// Import utilities
+import {
+  ftToM,
+  createCirclePolygon,
+  createObstacleShape,
+  createRibbonSegment,
+  isPointInPolygon,
+} from './utils/geometry';
+
+import {
+  generateColor,
+  altitudeToColor,
+  AIRCRAFT_CATEGORY_COLORS,
+  OBSTACLE_COLORS,
+} from './utils/colors';
+
+import {
+  parseNotamDateString,
+} from './utils/format';
+
+// Import weather utilities
+import {
+  parseMetar,
+  parseMetarTime,
+  formatUTC,
+  formatKST,
+} from './utils/weather';
+
+// Import aircraft constants
+import {
+  ICAO_TO_IATA,
+  AIRCRAFT_SILHOUETTE,
+  AIRCRAFT_COLORS,
+  getAircraftImage,
+  getAircraftColor,
+} from './constants/aircraft';
+
+// Import flight utilities
+import {
+  detectFlightPhase,
+  detectCurrentAirspace,
+  findNearestWaypoints,
+  detectCurrentProcedure,
+} from './utils/flight';
+
+// Import NOTAM utilities
+import {
+  parseNotamCoordinates,
+  getNotamDisplayCoords,
+  getNotamType,
+  getCancelledNotamRef,
+  extractDatesFromFullText,
+  getNotamValidity,
+  isNotamActive,
+  buildCancelledNotamSet,
+  createNotamCircle,
+} from './utils/notam';
+
+// Import components
+import {
+  AltitudeLegend,
+  Accordion,
+  ToggleItem,
+  SidPanel,
+  StarPanel,
+  ApproachPanel,
+  ChartOverlayPanel,
+  WeatherPanel,
+  AircraftDetailPanel,
+  TimeWeatherBar,
+  ViewControlsBar,
+  AircraftControlPanel,
+  KoreaAirspacePanel,
+} from './components';
+
+// Import hooks
+import {
+  useRadarLayer,
+  useChartOverlay,
+  useMapStyle,
+  useAtcRadarRings,
+  useAtcSectors,
+  useKoreaAirspace,
+} from './hooks';
+
+mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
+
+// NOTAM Cache - 메모리 캐시 사용 (localStorage는 용량 초과로 실패)
 const notamMemoryCache = {}; // { period: { data, timestamp } }
 
 // NOTAM 메모리 캐시 헬퍼 함수
@@ -45,796 +152,17 @@ const getNotamCacheAge = (period) => {
   return Date.now() - cached.timestamp;
 };
 
-// 전세계 공항 정보 (ICAO 코드 -> 정보)
-const AIRPORT_DATABASE = {
-  // ========== 대한민국 (RK) ==========
-  // 거점공항 (Hub Airports)
-  RKSI: { name: '인천국제공항', country: 'KR', type: 'hub', region: '중부권' },
-  RKSS: { name: '김포국제공항', country: 'KR', type: 'hub', region: '중부권' },
-  RKPK: { name: '김해국제공항', country: 'KR', type: 'hub', region: '동남권', note: '공군 제5공중기동비행단' },
-  RKPC: { name: '제주국제공항', country: 'KR', type: 'hub', region: '제주권' },
-  RKTN: { name: '대구국제공항', country: 'KR', type: 'hub', region: '대경권', note: '공군 공중전투사령부' },
-  RKTU: { name: '청주국제공항', country: 'KR', type: 'hub', region: '중부권', note: '공군 제17전투비행단' },
-  RKJB: { name: '무안국제공항', country: 'KR', type: 'hub', region: '서남권' },
+// NOTE: AIRPORT_DATABASE, COUNTRY_INFO, AIRPORT_TYPE_LABELS, AIRPORT_COORDINATES
+// are now imported from './constants/airports'
 
-  // 일반공항 (General Airports)
-  RKNY: { name: '양양국제공항', country: 'KR', type: 'general', region: '중부권' },
-  RKPU: { name: '울산공항', country: 'KR', type: 'general', region: '동남권' },
-  RKJY: { name: '여수공항', country: 'KR', type: 'general', region: '서남권' },
-  RKPS: { name: '사천공항', country: 'KR', type: 'general', region: '동남권', note: '공군 제3훈련비행단' },
-  RKTH: { name: '포항경주공항', country: 'KR', type: 'general', region: '대경권', note: '해군 항공사령부' },
-  RKJK: { name: '군산공항', country: 'KR', type: 'general', region: '서남권', note: '미공군 제8전투비행단' },
-  RKNW: { name: '원주공항', country: 'KR', type: 'general', region: '중부권', note: '공군 제8전투비행단' },
-  RKTL: { name: '울진비행장', country: 'KR', type: 'general', region: '대경권', note: '한국항공대 훈련용' },
-  RKJJ: { name: '광주공항', country: 'KR', type: 'general', region: '서남권', note: '공군 제1전투비행단' },
+// NOTE: TRAIL_COLOR, TRAIL_DURATION_OPTIONS, getAircraftApiUrl, getAircraftTraceUrl
+// are now imported from './constants/config'
 
-  // 사설공항 (Private Airports)
-  RKRS: { name: '수색비행장', country: 'KR', type: 'private', note: '육군 제11항공단' },
-  RKSE: { name: '사곶비행장', country: 'KR', type: 'private', note: '백령도 천연활주로' },
-  RKTA: { name: '태안비행장', country: 'KR', type: 'private', note: '한서대학교' },
-  RKPD: { name: '정석비행장', country: 'KR', type: 'private', note: '대한항공 훈련용' },
-  RKSJ: { name: '잠실헬리패드', country: 'KR', type: 'private' },
+// NOTE: generateColor, altitudeToColor, OBSTACLE_COLORS, AIRCRAFT_CATEGORY_COLORS
+// are now imported from './utils/colors'
 
-  // 군공항 - 육군 (Army)
-  RKRN: { name: '이천비행장', country: 'KR', type: 'military', note: '육군 항공작전사령부' },
-  RKRD: { name: '덕소비행장', country: 'KR', type: 'military', note: '육군 제11항공단' },
-  RKRP: { name: '파주비행장', country: 'KR', type: 'military', note: '육군 제11항공단' },
-  RKRG: { name: '광탄비행장', country: 'KR', type: 'military', note: '육군 제11항공단' },
-  RKRA: { name: '가납리비행장', country: 'KR', type: 'military', note: '육군 제11항공단' },
-  RKRK: { name: '가평비행장', country: 'KR', type: 'military', note: '육군 제15항공단' },
-  RKRO: { name: '포천비행장', country: 'KR', type: 'military', note: '육군 제15항공단' },
-  RKRY: { name: '용인비행장', country: 'KR', type: 'military', note: '육군 제17항공단' },
-  RKMS: { name: '신북비행장', country: 'KR', type: 'military', note: '육군 제12항공단' },
-  RKMB: { name: '홍천비행장', country: 'KR', type: 'military', note: '육군 제13항공단' },
-  RKMG: { name: '안대리비행장', country: 'KR', type: 'military', note: '육군 제13항공단' },
-  RKMA: { name: '현리비행장', country: 'KR', type: 'military', note: '육군 제13항공단' },
-  RKND: { name: '속초공항', country: 'KR', type: 'military', note: '육군 제13항공단' },
-  RKUY: { name: '영천비행장', country: 'KR', type: 'military', note: '육군 제21항공단' },
-  RKJU: { name: '전주비행장', country: 'KR', type: 'military', note: '육군 제21항공단' },
-
-  // 군공항 - 해군 (Navy)
-  RKPE: { name: '진해비행장', country: 'KR', type: 'military', note: '해군기지' },
-  RKJM: { name: '목포공항', country: 'KR', type: 'military', note: '해군 항공사령부' },
-
-  // 군공항 - 공군 (Air Force)
-  RKSM: { name: '서울공항', country: 'KR', type: 'military', note: '공군 제15특수임무비행단' },
-  RKSW: { name: '수원공항', country: 'KR', type: 'military', note: '공군 제10전투비행단' },
-  RKNN: { name: '강릉공항', country: 'KR', type: 'military', note: '공군 제18전투비행단' },
-  RKTE: { name: '성무비행장', country: 'KR', type: 'military', note: '공군사관학교' },
-  RKTI: { name: '중원비행장', country: 'KR', type: 'military', note: '공군 제19전투비행단' },
-  RKTF: { name: '계룡비행장', country: 'KR', type: 'military', note: '공군본부' },
-  RKTP: { name: '서산공항', country: 'KR', type: 'military', note: '공군 제20전투비행단, 2028년 민항 개항예정' },
-  RKTY: { name: '예천공항', country: 'KR', type: 'military', note: '공군 제16전투비행단' },
-
-  // 군공항 - 주한미군 (USFK)
-  RKSO: { name: '오산공군기지', country: 'KR', type: 'military', note: '주한미군 제7공군' },
-  RKSG: { name: '캠프 험프리스', country: 'KR', type: 'military', note: '주한미군 제2보병사단' },
-  RKTG: { name: '캠프 워커', country: 'KR', type: 'military', note: '주한미군 헬기기지' },
-  RKST: { name: '캠프 스탠리', country: 'KR', type: 'military', note: '주한미군 무인기' },
-
-  // FIR/ACC
-  RKRR: { name: '인천FIR', country: 'KR', type: 'fir' },
-
-  // ========== 북한 (ZK) ==========
-  ZKKP: { name: '평양FIR', country: 'KP', type: 'fir' },
-  ZKPY: { name: '평양순안국제공항', country: 'KP', type: 'hub' },
-
-  // ========== 일본 (RJ) ==========
-  // 주요 국제공항
-  RJTT: { name: '도쿄 하네다공항', country: 'JP', type: 'hub' },
-  RJAA: { name: '도쿄 나리타공항', country: 'JP', type: 'hub' },
-  RJBB: { name: '오사카 간사이공항', country: 'JP', type: 'hub' },
-  RJOO: { name: '오사카 이타미공항', country: 'JP', type: 'hub' },
-  RJCC: { name: '삿포로 신치토세공항', country: 'JP', type: 'hub' },
-  RJGG: { name: '나고야 추부국제공항', country: 'JP', type: 'hub' },
-  RJFF: { name: '후쿠오카공항', country: 'JP', type: 'hub' },
-  ROAH: { name: '오키나와 나하공항', country: 'JP', type: 'hub' },
-  // 지방공항
-  RJFK: { name: '가고시마공항', country: 'JP', type: 'general' },
-  RJFT: { name: '구마모토공항', country: 'JP', type: 'general' },
-  RJFM: { name: '미야자키공항', country: 'JP', type: 'general' },
-  RJFO: { name: '오이타공항', country: 'JP', type: 'general' },
-  RJFN: { name: '나가사키공항', country: 'JP', type: 'general' },
-  RJFU: { name: '사가공항', country: 'JP', type: 'general' },
-  RJBE: { name: '고베공항', country: 'JP', type: 'general' },
-  RJOK: { name: '고치공항', country: 'JP', type: 'general' },
-  RJOM: { name: '마쓰야마공항', country: 'JP', type: 'general' },
-  RJOT: { name: '다카마쓰공항', country: 'JP', type: 'general' },
-  RJOH: { name: '요나고공항', country: 'JP', type: 'general' },
-  RJOB: { name: '오카야마공항', country: 'JP', type: 'general' },
-  RJOC: { name: '이즈모공항', country: 'JP', type: 'general' },
-  RJOA: { name: '히로시마공항', country: 'JP', type: 'general' },
-  RJOS: { name: '도쿠시마공항', country: 'JP', type: 'general' },
-  RJNT: { name: '도야마공항', country: 'JP', type: 'general' },
-  RJNK: { name: '고마쓰공항', country: 'JP', type: 'general' },
-  RJNS: { name: '시즈오카공항', country: 'JP', type: 'general' },
-  RJNN: { name: '나고야 고마키공항', country: 'JP', type: 'general' },
-  RJSN: { name: '니가타공항', country: 'JP', type: 'general' },
-  RJSS: { name: '센다이공항', country: 'JP', type: 'general' },
-  RJSF: { name: '후쿠시마공항', country: 'JP', type: 'general' },
-  RJSK: { name: '아키타공항', country: 'JP', type: 'general' },
-  RJSC: { name: '야마가타공항', country: 'JP', type: 'general' },
-  RJCH: { name: '하코다테공항', country: 'JP', type: 'general' },
-  RJCB: { name: '오비히로공항', country: 'JP', type: 'general' },
-  RJCK: { name: '구시로공항', country: 'JP', type: 'general' },
-  RJEC: { name: '아사히카와공항', country: 'JP', type: 'general' },
-  // 일본 FIR
-  RJJJ: { name: '후쿠오카FIR', country: 'JP', type: 'fir' },
-
-  // ========== 중국 (Z) ==========
-  // 주요 국제공항
-  ZBAA: { name: '베이징 서우두공항', country: 'CN', type: 'hub' },
-  ZBAD: { name: '베이징 다싱공항', country: 'CN', type: 'hub' },
-  ZSPD: { name: '상하이 푸둥공항', country: 'CN', type: 'hub' },
-  ZSSS: { name: '상하이 홍차오공항', country: 'CN', type: 'hub' },
-  ZGGG: { name: '광저우 바이윈공항', country: 'CN', type: 'hub' },
-  ZGSZ: { name: '선전 바오안공항', country: 'CN', type: 'hub' },
-  ZUUU: { name: '청두 솽류공항', country: 'CN', type: 'hub' },
-  ZUCK: { name: '충칭 장베이공항', country: 'CN', type: 'hub' },
-  ZSHC: { name: '항저우 샤오산공항', country: 'CN', type: 'hub' },
-  ZSAM: { name: '샤먼 가오치공항', country: 'CN', type: 'hub' },
-  ZLXY: { name: '시안 셴양공항', country: 'CN', type: 'hub' },
-  ZSNJ: { name: '난징 루커우공항', country: 'CN', type: 'hub' },
-  ZHCC: { name: '정저우 신정공항', country: 'CN', type: 'hub' },
-  ZWWW: { name: '우루무치 디워푸공항', country: 'CN', type: 'hub' },
-  ZYTL: { name: '다롄 저우수이쯔공항', country: 'CN', type: 'hub' },
-  ZYTX: { name: '선양 타오셴공항', country: 'CN', type: 'hub' },
-  ZYCC: { name: '창춘 롱자공항', country: 'CN', type: 'hub' },
-  ZYHB: { name: '하얼빈 타이핑공항', country: 'CN', type: 'hub' },
-  ZSQD: { name: '칭다오 류팅공항', country: 'CN', type: 'hub' },
-  ZSJN: { name: '지난 야오창공항', country: 'CN', type: 'hub' },
-  // 중국 FIR
-  ZBPE: { name: '베이징FIR', country: 'CN', type: 'fir' },
-  ZGZU: { name: '광저우FIR', country: 'CN', type: 'fir' },
-  ZSHA: { name: '상하이FIR', country: 'CN', type: 'fir' },
-  ZYSH: { name: '선양FIR', country: 'CN', type: 'fir' },
-  ZLHW: { name: '란저우FIR', country: 'CN', type: 'fir' },
-  ZPKM: { name: '쿤밍FIR', country: 'CN', type: 'fir' },
-  ZWUQ: { name: '우루무치FIR', country: 'CN', type: 'fir' },
-
-  // ========== 대만 (RC) ==========
-  RCTP: { name: '타이페이 타오위안공항', country: 'TW', type: 'hub' },
-  RCSS: { name: '타이페이 쑹산공항', country: 'TW', type: 'hub' },
-  RCMQ: { name: '타이중 칭촨강공항', country: 'TW', type: 'hub' },
-  RCKH: { name: '카오슝공항', country: 'TW', type: 'hub' },
-  // 대만 FIR
-  RCAA: { name: '타이페이FIR', country: 'TW', type: 'fir' },
-
-  // ========== 홍콩/마카오 ==========
-  VHHH: { name: '홍콩국제공항', country: 'HK', type: 'hub' },
-  VMMC: { name: '마카오국제공항', country: 'MO', type: 'hub' },
-
-  // ========== 동남아시아 ==========
-  // 베트남
-  VVNB: { name: '하노이 노이바이공항', country: 'VN', type: 'hub' },
-  VVTS: { name: '호치민 떤선녓공항', country: 'VN', type: 'hub' },
-  VVDN: { name: '다낭국제공항', country: 'VN', type: 'hub' },
-  // 태국
-  VTBS: { name: '방콕 수완나품공항', country: 'TH', type: 'hub' },
-  VTBD: { name: '방콕 돈므앙공항', country: 'TH', type: 'hub' },
-  VTSP: { name: '푸켓국제공항', country: 'TH', type: 'hub' },
-  // 싱가포르
-  WSSS: { name: '싱가포르 창이공항', country: 'SG', type: 'hub' },
-  // 말레이시아
-  WMKK: { name: '쿠알라룸푸르공항', country: 'MY', type: 'hub' },
-  // 필리핀
-  RPLL: { name: '마닐라 니노이아키노공항', country: 'PH', type: 'hub' },
-  RPVM: { name: '세부 막탄공항', country: 'PH', type: 'hub' },
-  // 인도네시아
-  WIII: { name: '자카르타 수카르노하타공항', country: 'ID', type: 'hub' },
-  WADD: { name: '발리 응우라라이공항', country: 'ID', type: 'hub' },
-
-  // ========== 미주/유럽 (일부) ==========
-  KLAX: { name: '로스앤젤레스공항', country: 'US', type: 'hub' },
-  KJFK: { name: '뉴욕 JFK공항', country: 'US', type: 'hub' },
-  KSFO: { name: '샌프란시스코공항', country: 'US', type: 'hub' },
-  PHNL: { name: '호놀룰루공항', country: 'US', type: 'hub' },
-  PGUM: { name: '괌 원팻공항', country: 'US', type: 'hub' },
-  EGLL: { name: '런던 히드로공항', country: 'GB', type: 'hub' },
-  LFPG: { name: '파리 샤를드골공항', country: 'FR', type: 'hub' },
-  EDDF: { name: '프랑크푸르트공항', country: 'DE', type: 'hub' },
-};
-
-// 국가 코드별 정보
-const COUNTRY_INFO = {
-  KR: { name: '대한민국', flag: '🇰🇷', prefix: 'RK' },
-  KP: { name: '북한', flag: '🇰🇵', prefix: 'ZK' },
-  JP: { name: '일본', flag: '🇯🇵', prefix: 'RJ/RO' },
-  CN: { name: '중국', flag: '🇨🇳', prefix: 'Z' },
-  TW: { name: '대만', flag: '🇹🇼', prefix: 'RC' },
-  HK: { name: '홍콩', flag: '🇭🇰', prefix: 'VH' },
-  MO: { name: '마카오', flag: '🇲🇴', prefix: 'VM' },
-  VN: { name: '베트남', flag: '🇻🇳', prefix: 'VV' },
-  TH: { name: '태국', flag: '🇹🇭', prefix: 'VT' },
-  SG: { name: '싱가포르', flag: '🇸🇬', prefix: 'WS' },
-  MY: { name: '말레이시아', flag: '🇲🇾', prefix: 'WM' },
-  PH: { name: '필리핀', flag: '🇵🇭', prefix: 'RP' },
-  ID: { name: '인도네시아', flag: '🇮🇩', prefix: 'WI/WA' },
-  US: { name: '미국', flag: '🇺🇸', prefix: 'K/P' },
-  GB: { name: '영국', flag: '🇬🇧', prefix: 'EG' },
-  FR: { name: '프랑스', flag: '🇫🇷', prefix: 'LF' },
-  DE: { name: '독일', flag: '🇩🇪', prefix: 'ED' },
-};
-
-// 공항 타입별 한글명
-const AIRPORT_TYPE_LABELS = {
-  hub: '거점공항',
-  general: '일반공항',
-  private: '사설공항',
-  military: '군공항',
-  fir: 'FIR/ACC',
-};
-
-// 주요 공항 좌표 (NOTAM 지도 표시용)
-const AIRPORT_COORDINATES = {
-  // 대한민국 민간 공항
-  RKSI: { lat: 37.4691, lon: 126.4505 }, // 인천
-  RKSS: { lat: 37.5583, lon: 126.7906 }, // 김포
-  RKPK: { lat: 35.1795, lon: 128.9381 }, // 김해
-  RKPC: { lat: 33.5066, lon: 126.4929 }, // 제주
-  RKTN: { lat: 35.8941, lon: 128.6589 }, // 대구
-  RKTU: { lat: 36.7166, lon: 127.4991 }, // 청주
-  RKJB: { lat: 34.9914, lon: 126.3828 }, // 무안
-  RKNY: { lat: 38.0614, lon: 128.6692 }, // 양양
-  RKPU: { lat: 35.5935, lon: 129.3518 }, // 울산
-  RKJY: { lat: 34.8423, lon: 127.6161 }, // 여수
-  RKPS: { lat: 35.0886, lon: 128.0702 }, // 사천
-  RKTH: { lat: 35.9879, lon: 129.4203 }, // 포항
-  RKJK: { lat: 35.9038, lon: 126.6158 }, // 군산
-  RKNW: { lat: 37.4383, lon: 127.9604 }, // 원주
-  RKJJ: { lat: 35.1264, lon: 126.8089 }, // 광주
-  RKNN: { lat: 37.7536, lon: 128.9440 }, // 강릉
-  // 대한민국 군용/기타 공항
-  RKSM: { lat: 37.4449, lon: 127.1139 }, // 서울공항 (성남)
-  RKSW: { lat: 37.2394, lon: 127.0071 }, // 수원
-  RKSO: { lat: 37.0905, lon: 127.0296 }, // 오산
-  RKSG: { lat: 36.9617, lon: 127.0311 }, // 평택 (캠프 험프리)
-  RKTI: { lat: 36.7233, lon: 127.4981 }, // 청주 공군
-  RKTP: { lat: 37.5200, lon: 126.7411 }, // 김포 공군
-  RKTY: { lat: 36.6200, lon: 126.3300 }, // 태안
-  RKPD: { lat: 35.1456, lon: 128.6969 }, // 진해
-  RKTL: { lat: 36.8933, lon: 129.4619 }, // 울진
-  RKJM: { lat: 35.8986, lon: 126.9153 }, // 목포
-  RKJU: { lat: 35.6761, lon: 127.8881 }, // 예천
-  RKPE: { lat: 35.0894, lon: 129.0781 }, // 부산 수영
-  RKTE: { lat: 37.0250, lon: 127.8839 }, // 이천
-  RKRO: { lat: 37.5261, lon: 126.9667 }, // 용산
-  // 대한민국 FIR
-  RKRR: { lat: 37.0, lon: 127.5 }, // 인천FIR 중심
-  // 일본 주요 공항
-  RJTT: { lat: 35.5533, lon: 139.7811 }, // 하네다
-  RJAA: { lat: 35.7647, lon: 140.3864 }, // 나리타
-  RJBB: { lat: 34.4347, lon: 135.2440 }, // 간사이
-  RJOO: { lat: 34.7855, lon: 135.4381 }, // 이타미
-  RJFF: { lat: 33.5859, lon: 130.4511 }, // 후쿠오카
-  RJCC: { lat: 42.7752, lon: 141.6925 }, // 신치토세
-  RJGG: { lat: 34.8584, lon: 136.8050 }, // 추부
-  ROAH: { lat: 26.1958, lon: 127.6458 }, // 나하
-  RJFT: { lat: 32.8372, lon: 130.8550 }, // 구마모토
-  RJFR: { lat: 33.0831, lon: 131.7372 }, // 오이타
-  RJFO: { lat: 33.4800, lon: 131.7378 }, // 기타큐슈
-  RJFU: { lat: 32.9169, lon: 129.9136 }, // 나가사키
-  RJOI: { lat: 34.1436, lon: 132.2356 }, // 이와쿠니
-  // 일본 FIR
-  RJJJ: { lat: 33.5, lon: 130.5 }, // 후쿠오카FIR
-  // 중국
-  ZBAA: { lat: 40.0799, lon: 116.6031 }, // 베이징
-  ZSPD: { lat: 31.1434, lon: 121.8052 }, // 푸둥
-  ZGGG: { lat: 23.3924, lon: 113.2988 }, // 광저우
-  ZGSZ: { lat: 22.6393, lon: 113.8107 }, // 선전
-  // 대만
-  RCTP: { lat: 25.0777, lon: 121.2330 }, // 타오위안
-  RCSS: { lat: 25.0694, lon: 121.5517 }, // 쑹산
-  // 홍콩/마카오
-  VHHH: { lat: 22.3080, lon: 113.9185 }, // 홍콩
-  VMMC: { lat: 22.1496, lon: 113.5925 }, // 마카오
-};
-
-// 이전 호환성을 위한 별칭
-const KOREA_AIRPORTS = Object.fromEntries(
-  Object.entries(AIRPORT_DATABASE)
-    .filter(([_, info]) => info.country === 'KR')
-    .map(([code, info]) => [code, { name: info.name, type: info.type === 'hub' ? 'international' : info.type === 'general' ? 'domestic' : info.type }])
-);
-const TRAIL_COLOR = '#39FF14';
-const TRAIL_DURATION_OPTIONS = [
-  { label: '1분', value: 60000 },
-  { label: '5분', value: 300000 },
-  { label: '10분', value: 600000 },
-  { label: '30분', value: 1800000 },
-  { label: '1시간', value: 3600000 },
-];
-
-const getAircraftApiUrl = (lat, lon, radius = 100) => {
-  if (IS_PRODUCTION) return `/api/aircraft?lat=${lat}&lon=${lon}&radius=${radius}`;
-  return `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}`;
-};
-
-const getAircraftTraceUrl = (hex) => {
-  if (IS_PRODUCTION) return `/api/aircraft-trace?hex=${hex}`;
-  return `https://api.airplanes.live/v2/hex/${hex}`;
-};
-
-const generateColor = (index, total, hueOffset = 0) => `hsl(${(index * (360 / Math.max(total, 1)) + hueOffset) % 360}, 80%, 55%)`;
-const altitudeToColor = (altFt) => {
-  const t = Math.min(1, Math.max(0, altFt / 8000));
-  return t < 0.5 ? `rgb(${Math.round(255 * t * 2)}, 255, 50)` : `rgb(255, ${Math.round(255 * (1 - (t - 0.5) * 2))}, 50)`;
-};
-const createCirclePolygon = (lon, lat, radius, numPoints = 16) => {
-  const coords = [];
-  for (let i = 0; i <= numPoints; i++) {
-    const angle = (i / numPoints) * Math.PI * 2;
-    coords.push([lon + radius * Math.cos(angle), lat + radius * Math.sin(angle)]);
-  }
-  return [coords];
-};
-const createObstacleShape = (lon, lat, type, baseRadius = 0.00015) => {
-  if (type === 'Tower' || type === 'Antenna') {
-    const r = baseRadius * 0.6;
-    return [[[lon - r, lat - r], [lon + r, lat - r], [lon + r, lat + r], [lon - r, lat + r], [lon - r, lat - r]]];
-  }
-  if (type === 'Building') {
-    const w = baseRadius * 1.5, h = baseRadius;
-    return [[[lon - w, lat - h], [lon + w, lat - h], [lon + w, lat + h], [lon - w, lat + h], [lon - w, lat - h]]];
-  }
-  return createCirclePolygon(lon, lat, baseRadius, 12);
-};
-const createRibbonSegment = (coord1, coord2, width = 0.0008) => {
-  const [lon1, lat1, alt1] = coord1, [lon2, lat2, alt2] = coord2;
-  const dx = lon2 - lon1, dy = lat2 - lat1, len = Math.sqrt(dx * dx + dy * dy);
-  if (len === 0) return null;
-  const nx = -dy / len * width, ny = dx / len * width;
-  return { coordinates: [[[lon1 + nx, lat1 + ny], [lon1 - nx, lat1 - ny], [lon2 - nx, lat2 - ny], [lon2 + nx, lat2 + ny], [lon1 + nx, lat1 + ny]]], avgAlt: (alt1 + alt2) / 2 };
-};
-
-const OBSTACLE_COLORS = { Tower: '#F44336', Building: '#FF5722', Natural: '#4CAF50', Tree: '#8BC34A', Navaid: '#9C27B0', Antenna: '#FF9800', Unknown: '#607D8B' };
-const AIRCRAFT_CATEGORY_COLORS = { A0: '#00BCD4', A1: '#4CAF50', A2: '#8BC34A', A3: '#CDDC39', A4: '#FFEB3B', A5: '#FF9800', A6: '#F44336', A7: '#E91E63' };
-const ftToM = (ft) => ft * 0.3048;
-
-// ========== 비행 단계 감지 함수 ==========
-const detectFlightPhase = (aircraft, airportData) => {
-  if (!aircraft) return { phase: 'unknown', phase_kr: '알 수 없음', color: '#9E9E9E' };
-
-  const alt = aircraft.altitude_ft || 0;
-  const gs = aircraft.ground_speed || 0;
-  const vs = aircraft.vertical_rate || 0;
-  const onGround = aircraft.on_ground;
-
-  // 공항 좌표 (기본값: RKPU)
-  const airportLat = airportData?.lat || 35.5934;
-  const airportLon = airportData?.lon || 129.3518;
-
-  // 공항과의 거리 계산 (NM)
-  const distToAirport = Math.sqrt(
-    Math.pow((aircraft.lat - airportLat) * 60, 2) +
-    Math.pow((aircraft.lon - airportLon) * 60 * Math.cos(airportLat * Math.PI / 180), 2)
-  );
-
-  // 비행 단계 판정
-  if (onGround || (alt < 100 && gs < 30)) {
-    return { phase: 'ground', phase_kr: '지상', color: '#9E9E9E', icon: '🛬' };
-  }
-
-  if (alt < 500 && vs > 300 && gs > 60) {
-    return { phase: 'takeoff', phase_kr: '이륙', color: '#4CAF50', icon: '🛫' };
-  }
-
-  if (alt < 500 && vs < -300 && gs > 60 && distToAirport < 5) {
-    return { phase: 'landing', phase_kr: '착륙', color: '#FF9800', icon: '🛬' };
-  }
-
-  if (alt < 10000 && vs > 200 && distToAirport < 30) {
-    return { phase: 'departure', phase_kr: '출발', color: '#8BC34A', icon: '↗️' };
-  }
-
-  if (alt < 10000 && vs < -200 && distToAirport < 30) {
-    return { phase: 'approach', phase_kr: '접근', color: '#FF5722', icon: '↘️' };
-  }
-
-  if (alt >= 10000 || distToAirport > 30) {
-    if (Math.abs(vs) < 300) {
-      return { phase: 'cruise', phase_kr: '순항', color: '#2196F3', icon: '✈️' };
-    } else if (vs > 0) {
-      return { phase: 'climb', phase_kr: '상승', color: '#03A9F4', icon: '↗️' };
-    } else {
-      return { phase: 'descent', phase_kr: '강하', color: '#00BCD4', icon: '↘️' };
-    }
-  }
-
-  return { phase: 'enroute', phase_kr: '비행중', color: '#2196F3', icon: '✈️' };
-};
-
-// ========== Point-in-Polygon 알고리즘 ==========
-const isPointInPolygon = (point, polygon) => {
-  if (!polygon || !polygon.length) return false;
-  const [px, py] = point;
-  let inside = false;
-
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const [xi, yi] = polygon[i];
-    const [xj, yj] = polygon[j];
-
-    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
-      inside = !inside;
-    }
-  }
-  return inside;
-};
-
-// ========== 현재 공역 감지 ==========
-const detectCurrentAirspace = (aircraft, atcSectors) => {
-  if (!aircraft || !atcSectors) return [];
-
-  const results = [];
-  const alt = aircraft.altitude_ft || 0;
-  const point = [aircraft.lon, aircraft.lat];
-
-  // Check each sector type
-  ['CTR', 'TMA', 'ACC', 'FIR'].forEach(sectorType => {
-    const sectors = atcSectors[sectorType];
-    if (!sectors) return;
-
-    const sectorList = Array.isArray(sectors) ? sectors : [sectors];
-
-    sectorList.forEach(sector => {
-      if (!sector) return;
-
-      // For nested arrays (like ACC which has multiple sub-sectors)
-      if (Array.isArray(sector) && sector[0]?.coordinates) {
-        sector.forEach(subSector => {
-          if (checkSectorContains(subSector, point, alt)) {
-            results.push({
-              type: sectorType,
-              ...subSector
-            });
-          }
-        });
-      } else if (sector.coordinates) {
-        if (checkSectorContains(sector, point, alt)) {
-          results.push({
-            type: sectorType,
-            ...sector
-          });
-        }
-      }
-    });
-  });
-
-  return results;
-};
-
-const checkSectorContains = (sector, point, alt) => {
-  if (!sector?.coordinates) return false;
-
-  // Check altitude limits
-  const floor = sector.floor_ft || 0;
-  const ceiling = sector.ceiling_ft || 60000;
-  if (alt < floor || alt > ceiling) return false;
-
-  // Check if point is in polygon
-  const coords = sector.coordinates;
-  if (coords.length === 0) return false;
-
-  // Handle nested polygon format [[[ ]]]
-  const polygon = Array.isArray(coords[0][0]) ? coords[0] : coords;
-  return isPointInPolygon(point, polygon);
-};
-
-// ========== 가장 가까운 Waypoint 찾기 ==========
-const findNearestWaypoints = (aircraft, waypoints, limit = 5) => {
-  if (!aircraft || !waypoints) return [];
-
-  const results = waypoints.map(wp => {
-    const dist = Math.sqrt(
-      Math.pow((wp.lat - aircraft.lat) * 60, 2) +
-      Math.pow((wp.lon - aircraft.lon) * 60 * Math.cos(aircraft.lat * Math.PI / 180), 2)
-    );
-
-    // 진행 방향 기준으로 앞에 있는지 확인
-    const bearing = Math.atan2(
-      (wp.lon - aircraft.lon) * Math.cos(aircraft.lat * Math.PI / 180),
-      wp.lat - aircraft.lat
-    ) * 180 / Math.PI;
-
-    const trackDiff = Math.abs(((bearing - (aircraft.track || 0) + 180) % 360) - 180);
-    const isAhead = trackDiff < 90;
-
-    // 예상 도착 시간 계산 (분)
-    const gs = aircraft.ground_speed || 200; // knots
-    const etaMinutes = gs > 0 ? (dist / gs) * 60 : null;
-
-    return {
-      ...wp,
-      distance_nm: dist,
-      isAhead,
-      etaMinutes,
-      bearing
-    };
-  })
-  .filter(wp => wp.isAhead && wp.distance_nm < 100) // 100NM 이내, 진행방향
-  .sort((a, b) => a.distance_nm - b.distance_nm)
-  .slice(0, limit);
-
-  return results;
-};
-
-// ========== 현재 절차(SID/STAR/APCH) 감지 ==========
-const detectCurrentProcedure = (aircraft, procedures, flightPhase) => {
-  if (!aircraft || !procedures) return null;
-
-  const point = [aircraft.lon, aircraft.lat];
-  const alt = aircraft.altitude_ft || 0;
-
-  // 비행 단계에 따라 확인할 절차 유형 결정
-  let procedureTypes = [];
-  if (flightPhase === 'departure' || flightPhase === 'takeoff') {
-    procedureTypes = ['SID'];
-  } else if (flightPhase === 'approach' || flightPhase === 'landing') {
-    procedureTypes = ['APPROACH', 'STAR'];
-  } else {
-    procedureTypes = ['SID', 'STAR', 'APPROACH'];
-  }
-
-  let closestProcedure = null;
-  let minDistance = Infinity;
-
-  procedureTypes.forEach(type => {
-    const procs = procedures[type];
-    if (!procs) return;
-
-    Object.entries(procs).forEach(([name, proc]) => {
-      if (!proc.segments) return;
-
-      proc.segments.forEach(segment => {
-        if (!segment.coordinates) return;
-
-        // 세그먼트의 각 점과의 거리 확인
-        segment.coordinates.forEach(coord => {
-          const dist = Math.sqrt(
-            Math.pow((coord[1] - aircraft.lat) * 60, 2) +
-            Math.pow((coord[0] - aircraft.lon) * 60 * Math.cos(aircraft.lat * Math.PI / 180), 2)
-          );
-
-          if (dist < minDistance && dist < 3) { // 3NM 이내
-            minDistance = dist;
-            closestProcedure = {
-              type,
-              name: proc.display_name || name,
-              segment: segment.segment_name,
-              distance_nm: dist
-            };
-          }
-        });
-      });
-    });
-  });
-
-  return closestProcedure;
-};
-
-// Parse NOTAM Q-line coordinates (e.g., "3505N12804E005" -> {lat, lon, radius})
-const parseNotamCoordinates = (fullText) => {
-  if (!fullText) return null;
-  // Q-line format: Q) FIR/QCODE/TRAFFIC/PURPOSE/SCOPE/LOWER/UPPER/COORD
-  const qLineMatch = fullText.match(/Q\)\s*\S+\/\S+\/\S+\/\S+\/\S+\/(\d{3})\/(\d{3})\/(\d{4})([NS])(\d{5})([EW])(\d{3})/);
-  if (!qLineMatch) return null;
-
-  const [, lowerAlt, upperAlt, latDeg, latDir, lonDeg, lonDir, radiusNM] = qLineMatch;
-
-  // Parse latitude: DDMM format
-  const latDegrees = parseInt(latDeg.substring(0, 2), 10);
-  const latMinutes = parseInt(latDeg.substring(2, 4), 10);
-  let lat = latDegrees + latMinutes / 60;
-  if (latDir === 'S') lat = -lat;
-
-  // Parse longitude: DDDMM format
-  const lonDegrees = parseInt(lonDeg.substring(0, 3), 10);
-  const lonMinutes = parseInt(lonDeg.substring(3, 5), 10);
-  let lon = lonDegrees + lonMinutes / 60;
-  if (lonDir === 'W') lon = -lon;
-
-  return {
-    lat,
-    lon,
-    radiusNM: parseInt(radiusNM, 10),
-    lowerAlt: parseInt(lowerAlt, 10) * 100, // FL to feet
-    upperAlt: parseInt(upperAlt, 10) * 100,
-  };
-};
-
-// Get NOTAM coordinates - try Q-line first, fallback to airport coordinates
-const getNotamDisplayCoords = (notam) => {
-  // First try to parse from Q-line
-  const qCoords = parseNotamCoordinates(notam.full_text);
-  if (qCoords) return qCoords;
-
-  // Fallback: use airport coordinates from database
-  const airportCoords = AIRPORT_COORDINATES[notam.location];
-  if (airportCoords) {
-    return {
-      lat: airportCoords.lat,
-      lon: airportCoords.lon,
-      radiusNM: 5, // Default 5 NM radius for airport NOTAMs
-      lowerAlt: 0,
-      upperAlt: 5000, // Default 5000 ft
-    };
-  }
-
-  return null;
-};
-
-// Parse NOTAM type from full text (NOTAMN=New, NOTAMR=Replace, NOTAMC=Cancel)
-const getNotamType = (fullText) => {
-  if (!fullText) return 'N';
-  // Look for NOTAMN, NOTAMR, NOTAMC in the text
-  if (fullText.includes('NOTAMC')) return 'C'; // Cancel - cancels another NOTAM
-  if (fullText.includes('NOTAMR')) return 'R'; // Replace - replaces another NOTAM
-  return 'N'; // New - default
-};
-
-// Extract cancelled/replaced NOTAM reference (e.g., "A1081/24 NOTAMC A1045/24" -> "A1045/24")
-const getCancelledNotamRef = (fullText) => {
-  if (!fullText) return null;
-  // Pattern: NOTAMC or NOTAMR followed by the reference (e.g., "NOTAMC A1045/24")
-  const match = fullText.match(/NOTAM[CR]\s+([A-Z]\d{4}\/\d{2})/);
-  return match ? match[1] : null;
-};
-
-// Helper: Parse NOTAM date from YYMMDDHHMM format
-const parseNotamDateString = (dateStr) => {
-  if (!dateStr || dateStr.length < 10) return null;
-  const year = 2000 + parseInt(dateStr.substring(0, 2), 10);
-  const month = parseInt(dateStr.substring(2, 4), 10) - 1;
-  const day = parseInt(dateStr.substring(4, 6), 10);
-  const hour = parseInt(dateStr.substring(6, 8), 10);
-  const minute = parseInt(dateStr.substring(8, 10), 10);
-  return new Date(Date.UTC(year, month, day, hour, minute));
-};
-
-// Helper: Extract start/end dates from NOTAM full_text (Item B and C)
-const extractDatesFromFullText = (fullText) => {
-  if (!fullText) return { start: null, end: null };
-
-  // Item B: start date B) YYMMDDHHMM
-  const startMatch = fullText.match(/B\)\s*(\d{10})/);
-  const start = startMatch ? parseNotamDateString(startMatch[1]) : null;
-
-  // Item C: end date C) YYMMDDHHMM or PERM or EST
-  const endMatch = fullText.match(/C\)\s*(\d{10}|PERM)/);
-  let end = null;
-  if (endMatch) {
-    if (endMatch[1] === 'PERM') {
-      end = new Date(2099, 11, 31); // Permanent = far future
-    } else {
-      end = parseNotamDateString(endMatch[1]);
-    }
-  }
-
-  return { start, end };
-};
-
-// Check if NOTAM is currently active or will be active in the future
-// Returns: 'active' (currently valid), 'future' (will be valid), or false (expired/cancelled)
-const getNotamValidity = (notam, cancelledSet = new Set()) => {
-  // Skip NOTAMC (cancel) type - these just cancel other NOTAMs
-  const notamType = getNotamType(notam.full_text);
-  if (notamType === 'C') return false;
-
-  // Check if this NOTAM has been cancelled by another NOTAM
-  if (cancelledSet.has(notam.notam_number)) return false;
-
-  const now = new Date();
-  let startDate = null;
-  let endDate = null;
-
-  // Try to get dates from effective_start/effective_end fields first
-  if (notam.effective_start && notam.effective_start.length >= 10) {
-    startDate = parseNotamDateString(notam.effective_start);
-  }
-
-  if (notam.effective_end && notam.effective_end.length >= 10 &&
-      !notam.effective_end.includes('PERM') && !notam.effective_end.includes('EST')) {
-    endDate = parseNotamDateString(notam.effective_end);
-  } else if (notam.effective_end?.includes('PERM')) {
-    endDate = new Date(2099, 11, 31); // Permanent
-  }
-
-  // Fallback: extract dates from full_text if effective_start/end not available
-  if (!startDate || !endDate) {
-    const extracted = extractDatesFromFullText(notam.full_text);
-    if (!startDate && extracted.start) startDate = extracted.start;
-    if (!endDate && extracted.end) endDate = extracted.end;
-  }
-
-  // If still no start date, we can't determine validity - assume active to show on map
-  if (!startDate) {
-    // Check if there's at least some date info in full_text to avoid showing ancient NOTAMs
-    if (notam.full_text && notam.full_text.includes('B)')) {
-      return 'active'; // Has B) field but couldn't parse - show anyway
-    }
-    return false;
-  }
-
-  // Check if already expired
-  if (endDate && now > endDate) return false;
-
-  // Check if future NOTAM
-  if (startDate && now < startDate) return 'future';
-
-  // Currently active
-  return 'active';
-};
-
-// Wrapper for backward compatibility - returns true for active or future NOTAMs
-const isNotamActive = (notam, cancelledSet = new Set()) => {
-  const validity = getNotamValidity(notam, cancelledSet);
-  return validity === 'active' || validity === 'future';
-};
-
-// Build a set of cancelled NOTAM references from NOTAMC and NOTAMR
-const buildCancelledNotamSet = (notams) => {
-  const cancelledSet = new Set();
-  if (!notams) return cancelledSet;
-
-  notams.forEach(n => {
-    const type = getNotamType(n.full_text);
-    if (type === 'C' || type === 'R') {
-      const ref = getCancelledNotamRef(n.full_text);
-      if (ref) cancelledSet.add(ref);
-    }
-  });
-
-  return cancelledSet;
-};
-
-// Create circle polygon for NOTAM radius (in nautical miles)
-const createNotamCircle = (lon, lat, radiusNM, numPoints = 32) => {
-  const coords = [];
-  // 1 NM = 1.852 km, convert to degrees (roughly)
-  const radiusDeg = (radiusNM * 1.852) / 111.32; // approximate for latitude
-  for (let i = 0; i <= numPoints; i++) {
-    const angle = (i / numPoints) * Math.PI * 2;
-    const latOffset = radiusDeg * Math.sin(angle);
-    const lonOffset = (radiusDeg * Math.cos(angle)) / Math.cos(lat * Math.PI / 180);
-    coords.push([lon + lonOffset, lat + latOffset]);
-  }
-  return [coords];
-};
-
-const AIRCRAFT_MODEL_MAP = {
-  'A380': '/A380.glb', 'A388': '/A380.glb', 'A330': '/A380.glb', 'A350': '/A380.glb',
-  'B77W': '/b777.glb', 'B77L': '/b777.glb', 'B772': '/b777.glb', 'B773': '/b777.glb',
-  'B789': '/b777.glb', 'B788': '/b777.glb', 'B787': '/b777.glb',
-  'B737': '/b737.glb', 'B738': '/b737.glb', 'B739': '/b737.glb', 'B38M': '/b737.glb', 'B39M': '/b737.glb',
-  'A320': '/b737.glb', 'A321': '/b737.glb', 'A319': '/b737.glb', 'A20N': '/b737.glb', 'A21N': '/b737.glb',
-  'H145': '/helicopter.glb', 'H155': '/helicopter.glb', 'H160': '/helicopter.glb',
-  'EC35': '/helicopter.glb', 'EC45': '/helicopter.glb', 'EC55': '/helicopter.glb',
-  'S76': '/helicopter.glb', 'AS65': '/helicopter.glb', 'B412': '/helicopter.glb',
-  'default_heli': '/helicopter.glb', 'default_jet': '/b737.glb', 'default': '/b737.glb',
-};
-
-const MAP_STYLES = {
-  dark: 'mapbox://styles/mapbox/dark-v11',
-  light: 'mapbox://styles/mapbox/light-v11',
-  satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
-  black: { version: 8, name: 'Radar Black', sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#000000' } }] }
-};
-
-const PROCEDURE_CHARTS = {
-  'sid_rwy18_rnav': { name: 'RNAV SID', file: '/charts/sid_rwy18_rnav.png', runway: '18', type: 'SID' },
-  'sid_rwy18_conv': { name: 'Conventional SID', file: '/charts/sid_rwy18_conv.png', runway: '18', type: 'SID' },
-  'star_rwy18': { name: 'STAR', file: '/charts/star_rwy18.png', runway: '18', type: 'STAR' },
-  'apch_rnp_y_rwy18': { name: 'RNP Y', file: '/charts/apch_rnp_y_rwy18.png', runway: '18', type: 'APCH' },
-  'apch_rnp_z_rwy18': { name: 'RNP Z (AR)', file: '/charts/apch_rnp_z_rwy18.png', runway: '18', type: 'APCH' },
-  'apch_vor_rwy18': { name: 'VOR', file: '/charts/apch_vor_rwy18.png', runway: '18', type: 'APCH' },
-  'sid_rwy36_rnav': { name: 'RNAV SID', file: '/charts/sid_rwy36_rnav.png', runway: '36', type: 'SID' },
-  'sid_rwy36_conv': { name: 'Conventional SID', file: '/charts/sid_rwy36_conv.png', runway: '36', type: 'SID' },
-  'star_rwy36': { name: 'STAR', file: '/charts/star_rwy36.png', runway: '36', type: 'STAR' },
-  'apch_ils_y_rwy36': { name: 'ILS Y', file: '/charts/apch_ils_y_rwy36.png', runway: '36', type: 'APCH' },
-  'apch_ils_z_rwy36': { name: 'ILS Z', file: '/charts/apch_ils_z_rwy36.png', runway: '36', type: 'APCH' },
-  'apch_rnp_rwy36': { name: 'RNP', file: '/charts/apch_rnp_rwy36.png', runway: '36', type: 'APCH' },
-  'apch_vor_rwy36': { name: 'VOR', file: '/charts/apch_vor_rwy36.png', runway: '36', type: 'APCH' },
-};
+// NOTE: ftToM, createCirclePolygon, createObstacleShape, createRibbonSegment, isPointInPolygon
+// NOTE: AIRCRAFT_MODEL_MAP, MAP_STYLES, PROCEDURE_CHARTS are now imported from './constants/config'
 
 function App() {
   const mapContainer = useRef(null);
@@ -852,9 +180,9 @@ function App() {
   const [activeCharts, setActiveCharts] = useState({});
   const [chartOpacities, setChartOpacities] = useState({});
 
-  // Accordion states - all sections
+  // Accordion states - all sections (기본 레이어만 열려있음)
   const [layersExpanded, setLayersExpanded] = useState(true);
-  const [aircraftExpanded, setAircraftExpanded] = useState(true);
+  const [aircraftExpanded, setAircraftExpanded] = useState(false);
   const [sidExpanded, setSidExpanded] = useState(false);
   const [starExpanded, setStarExpanded] = useState(false);
   const [apchExpanded, setApchExpanded] = useState(false);
@@ -914,53 +242,8 @@ function App() {
   // aviationstack API key (환경변수 또는 직접 설정)
   const AVIATIONSTACK_API_KEY = import.meta.env.VITE_AVIATIONSTACK_API_KEY || '';
 
-  // ICAO → IATA 항공사 코드 변환 (한국 및 주요 항공사)
-  const ICAO_TO_IATA = {
-    'KAL': 'KE', 'AAR': 'OZ', 'JNA': 'LJ', 'JJA': '7C', 'TWB': 'TW', 'ABL': 'BX', 'EOK': 'ZE', 'ASV': 'RF',
-    'ANA': 'NH', 'JAL': 'JL', 'CPA': 'CX', 'CSN': 'CZ', 'CES': 'MU', 'CCA': 'CA', 'HVN': 'VN', 'THA': 'TG',
-    'SIA': 'SQ', 'MAS': 'MH', 'EVA': 'BR', 'CAL': 'CI', 'UAL': 'UA', 'AAL': 'AA', 'DAL': 'DL',
-    'AFR': 'AF', 'BAW': 'BA', 'DLH': 'LH', 'KLM': 'KL', 'QFA': 'QF', 'UAE': 'EK', 'ETD': 'EY',
-    'FDX': 'FX', 'UPS': '5X', 'GTI': 'GT', // 화물기
-  };
-
-  // 기종별 실루엣 SVG (inline data URL - 외부 의존성 없음)
-  const AIRCRAFT_SILHOUETTE = `data:image/svg+xml,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40" fill="#64b5f6">
-      <path d="M95 20L85 17V15L50 12V8L48 6H46L44 8V12L15 14V16L5 18V20L5 22L15 24V26L44 28V32L46 34H48L50 32V28L85 25V23L95 20Z"/>
-      <circle cx="20" cy="20" r="3" fill="#333"/>
-      <circle cx="70" cy="20" r="3" fill="#333"/>
-    </svg>
-  `)}`;
-
-  // 기종 그룹별 색상
-  const AIRCRAFT_COLORS = {
-    'B7': '#4fc3f7', // 보잉 737
-    'B77': '#29b6f6', // 보잉 777
-    'B78': '#03a9f4', // 보잉 787
-    'B74': '#0288d1', // 보잉 747
-    'A3': '#ab47bc', // 에어버스 A3xx
-    'A38': '#7b1fa2', // 에어버스 A380
-    'AT': '#66bb6a', // ATR
-    'DH': '#43a047', // Dash
-    'E': '#ffa726', // 엠브라에르
-    'C': '#ef5350', // 세스나/비즈젯
-  };
-
-  // 기종 코드로 실루엣 이미지 가져오기
-  const getAircraftImage = (typeCode) => {
-    return AIRCRAFT_SILHOUETTE;
-  };
-
-  // 기종 코드로 색상 가져오기
-  const getAircraftColor = (typeCode) => {
-    if (!typeCode) return '#64b5f6';
-    const code = typeCode.toUpperCase();
-    for (const [prefix, color] of Object.entries(AIRCRAFT_COLORS)) {
-      if (code.startsWith(prefix)) return color;
-    }
-    return '#64b5f6';
-  };
-
+  // NOTE: ICAO_TO_IATA, AIRCRAFT_SILHOUETTE, AIRCRAFT_COLORS, getAircraftImage, getAircraftColor
+  // are now imported from './constants/aircraft'
 
   const [weatherData, setWeatherData] = useState(null);
   const weatherIntervalRef = useRef(null);
@@ -973,7 +256,7 @@ function App() {
     const [wxLayersExpanded, setWxLayersExpanded] = useState(false);
 
   // Weather data states
-  const [radarData, setRadarData] = useState(null);
+  // NOTE: radarData is now managed by useRadarLayer hook
   const [satelliteWxData, setSatelliteWxData] = useState(null);
   const [lightningData, setLightningData] = useState(null);
   const [sigmetData, setSigmetData] = useState(null);
@@ -1024,6 +307,25 @@ function App() {
   const gltfLoaderRef = useRef(null);
   const aircraftMeshesRef = useRef({});
   const procedureObjectsRef = useRef([]);
+
+  // Custom Hooks for map layers
+  const { radarData } = useRadarLayer(map, mapLoaded, showRadar);
+  useChartOverlay(map, mapLoaded, activeCharts, chartOpacities, chartBounds);
+  useMapStyle({
+    map,
+    mapLoaded,
+    setMapLoaded,
+    isDarkMode,
+    showSatellite,
+    atcOnlyMode,
+    radarBlackBackground,
+    is3DView,
+    showTerrain,
+    show3DAltitude
+  });
+  useAtcRadarRings(map, mapLoaded, atcOnlyMode, radarRange);
+  useAtcSectors(map, mapLoaded, atcData, selectedAtcSectors);
+  useKoreaAirspace(map, mapLoaded, koreaAirspaceData, showKoreaRoutes, showKoreaWaypoints, showKoreaNavaids, showKoreaAirspaces, is3DView, show3DAltitude);
 
   // Android WebView height fix - Critical for Galaxy S25 Ultra full-screen display
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
@@ -1117,22 +419,7 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const formatUTC = (date) => date.toISOString().slice(11, 19) + 'Z';
-  const formatKST = (date) => new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(11, 19) + 'L';
-
-  const parseMetarTime = (metar) => {
-    if (!metar?.obsTime) return '';
-    try {
-      // Format: YYYYMMDDHHMM
-      const y = metar.obsTime.slice(0, 4);
-      const m = metar.obsTime.slice(4, 6);
-      const d = metar.obsTime.slice(6, 8);
-      const h = metar.obsTime.slice(8, 10);
-      const min = metar.obsTime.slice(10, 12);
-      return `${parseInt(d)}일 ${h}${min}L`;
-    } catch (e) {}
-    return metar.obsTime;
-  };
+  // NOTE: formatUTC, formatKST, parseMetarTime are now imported from './utils/weather'
 
   const fetchWeatherData = useCallback(async () => {
     try {
@@ -1305,36 +592,7 @@ function App() {
     return '/b737.glb';
   }, []);
 
-  const parseMetar = (metar) => {
-    if (!metar) return null;
-    const result = { wind: '', visibility: '', temp: '', rvr: '', ceiling: '', cloud: '' };
-    if (metar.wdir !== undefined && metar.wspd !== undefined) {
-      result.wind = `${String(metar.wdir).padStart(3, '0')}°/${metar.wspd}kt`;
-      if (metar.wgst) result.wind += `G${metar.wgst}`;
-      if (metar.wspdMs) result.windMs = `${metar.wspdMs}m/s`;
-    }
-    if (metar.visib !== undefined) result.visibility = metar.visib >= 10 ? '10km+' : `${metar.visib}km`;
-    if (metar.temp !== undefined) {
-      result.temp = `${metar.temp}°C`;
-      if (metar.dewp !== undefined) result.temp += `/${metar.dewp}°C`;
-    }
-    // RVR
-    if (metar.lRvr || metar.rRvr) {
-      const rvrs = [];
-      if (metar.lRvr) rvrs.push(`L${metar.lRvr}m`);
-      if (metar.rRvr) rvrs.push(`R${metar.rRvr}m`);
-      result.rvr = `RVR ${rvrs.join('/')}`;
-    }
-    // Ceiling
-    if (metar.ceiling) result.ceiling = `CIG ${metar.ceiling}ft`;
-    // Cloud
-    if (metar.cloud !== undefined && metar.cloud !== null) result.cloud = `${metar.cloud}/10`;
-    // Humidity
-    if (metar.humidity) result.humidity = `${metar.humidity}%`;
-    // Rain
-    if (metar.rain) result.rain = `${metar.rain}mm`;
-    return result;
-  };
+  // NOTE: parseMetar is now imported from './utils/weather'
 
   // 개별 항공기의 과거 위치 히스토리 로드
   const loadAircraftTrace = useCallback(async (hex) => {
@@ -1514,16 +772,7 @@ function App() {
     }
   }, [showTerrain, is3DView, show3DAltitude, mapLoaded]);
 
-  // Handle 2D/3D toggle
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-    if (is3DView) {
-      map.current.easeTo({ pitch: 60, bearing: -30, duration: 1000 });
-    } else {
-      map.current.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
-      map.current.setTerrain(null);
-    }
-  }, [is3DView, mapLoaded]);
+  // NOTE: 2D/3D toggle is now handled by useMapStyle hook
 
   // Handle 3D buildings visibility
   useEffect(() => {
@@ -1535,444 +784,12 @@ function App() {
     } catch (e) {}
   }, [showBuildings, is3DView, mapLoaded]);
 
-  // Fetch radar data from RainViewer API
-  useEffect(() => {
-    const fetchRadarData = async () => {
-      try {
-        const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
-        const data = await response.json();
-        if (data?.radar?.past?.length > 0) {
-          setRadarData(data);
-        }
-      } catch (e) {
-        console.error('Failed to fetch radar data:', e);
-      }
-    };
-    fetchRadarData();
-    const interval = setInterval(fetchRadarData, 300000); // 5분마다 갱신
-    return () => clearInterval(interval);
-  }, []);
-
-  // Radar layer management
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-
-    const removeRadarLayer = () => {
-      try {
-        if (map.current.getLayer('radar-layer')) map.current.removeLayer('radar-layer');
-        if (map.current.getSource('radar-source')) map.current.removeSource('radar-source');
-      } catch (e) {}
-    };
-
-    if (showRadar && radarData?.radar?.past?.length > 0) {
-      const latestFrame = radarData.radar.past[radarData.radar.past.length - 1];
-      const tileUrl = `${radarData.host}${latestFrame.path}/256/{z}/{x}/{y}/4/1_1.png`;
-
-      removeRadarLayer();
-
-      map.current.addSource('radar-source', {
-        type: 'raster',
-        tiles: [tileUrl],
-        tileSize: 256
-      });
-
-      map.current.addLayer({
-        id: 'radar-layer',
-        type: 'raster',
-        source: 'radar-source',
-        paint: { 'raster-opacity': 0.6 }
-      }, map.current.getLayer('runway') ? 'runway' : undefined);
-    } else {
-      removeRadarLayer();
-    }
-  }, [showRadar, radarData, mapLoaded]);
-
-  // Handle style change
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-    // 레이더 모드 + 검은 배경이면 완전 검은 스타일 적용
-    let newStyle;
-    if (atcOnlyMode && radarBlackBackground) {
-      newStyle = MAP_STYLES.black;
-    } else {
-      newStyle = showSatellite ? MAP_STYLES.satellite : (isDarkMode ? MAP_STYLES.dark : MAP_STYLES.light);
-    }
-    const center = map.current.getCenter(), zoom = map.current.getZoom(), pitch = map.current.getPitch(), bearing = map.current.getBearing();
-
-    map.current.setStyle(newStyle);
-    map.current.once('style.load', () => {
-      map.current.setCenter(center); map.current.setZoom(zoom); map.current.setPitch(pitch); map.current.setBearing(bearing);
-      if (!map.current.getSource('mapbox-dem')) map.current.addSource('mapbox-dem', { type: 'raster-dem', url: 'mapbox://mapbox.mapbox-terrain-dem-v1', tileSize: 512, maxzoom: 14 });
-      // 3D 고도 표시가 활성화되면 terrain을 비활성화하여 MSL 기준 절대 고도로 표시
-      if (is3DView && showTerrain && !show3DAltitude) map.current.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
-      if (!map.current.getLayer('sky')) map.current.addLayer({ id: 'sky', type: 'sky', paint: { 'sky-type': 'atmosphere', 'sky-atmosphere-sun': [0.0, 90.0], 'sky-atmosphere-sun-intensity': 15 } });
-      // 검은 배경 모드가 아닐 때만 빌딩 추가
-      if (!(atcOnlyMode && radarBlackBackground) && !map.current.getLayer('3d-buildings') && map.current.getSource('composite')) {
-        map.current.addLayer({ id: '3d-buildings', source: 'composite', 'source-layer': 'building', type: 'fill-extrusion', minzoom: 12, paint: { 'fill-extrusion-color': '#aaa', 'fill-extrusion-height': ['get', 'height'], 'fill-extrusion-base': ['get', 'min_height'], 'fill-extrusion-opacity': 0.6 } });
-      }
-      if (!map.current.getSource('runway')) map.current.addSource('runway', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [[129.3505, 35.5890], [129.3530, 35.5978]] } } });
-      if (!map.current.getLayer('runway')) map.current.addLayer({ id: 'runway', type: 'line', source: 'runway', paint: { 'line-color': '#FFFFFF', 'line-width': 8 } });
-      setMapLoaded(false);
-      setTimeout(() => setMapLoaded(true), 100);
-    });
-  }, [isDarkMode, showSatellite, atcOnlyMode, radarBlackBackground]);
-
-  // Chart overlay management
-  useEffect(() => {
-    if (!map.current || !mapLoaded || Object.keys(chartBounds).length === 0) return;
-    const safeRemove = (type, id) => { try { if (map.current[`get${type}`](id)) map.current[`remove${type}`](id); } catch (e) {} };
-
-    Object.keys(PROCEDURE_CHARTS).forEach((chartId) => {
-      const layerId = `chart-${chartId}`, sourceId = `chart-source-${chartId}`;
-      const isActive = activeCharts[chartId], bounds = chartBounds[chartId]?.bounds;
-
-      if (isActive && bounds) {
-        if (!map.current.getSource(sourceId)) map.current.addSource(sourceId, { type: 'image', url: PROCEDURE_CHARTS[chartId].file, coordinates: bounds });
-        if (!map.current.getLayer(layerId)) map.current.addLayer({ id: layerId, type: 'raster', source: sourceId, paint: { 'raster-opacity': chartOpacities[chartId] || 0.7 } }, 'runway');
-        else map.current.setPaintProperty(layerId, 'raster-opacity', chartOpacities[chartId] || 0.7);
-      } else {
-        safeRemove('Layer', layerId);
-        safeRemove('Source', sourceId);
-      }
-    });
-  }, [activeCharts, chartOpacities, chartBounds, mapLoaded]);
-
-  // ATC Only Mode (Radar Display) - 검은 배경 + 50nm 주요 링 + 10nm 세부 링 (150nm까지)
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-
-    const safeRemoveLayer = (id) => { try { if (map.current.getLayer(id)) map.current.removeLayer(id); } catch (e) {} };
-    const safeRemoveSource = (id) => { try { if (map.current.getSource(id)) map.current.removeSource(id); } catch (e) {} };
-
-    // Clean up previous radar layers
-    for (let i = 1; i <= 15; i++) {
-      safeRemoveLayer(`radar-ring-${i}`);
-      safeRemoveLayer(`radar-ring-label-${i}`);
-      safeRemoveSource(`radar-ring-${i}`);
-      safeRemoveSource(`radar-ring-label-${i}`);
-    }
-    for (let i = 0; i < 36; i++) {
-      safeRemoveLayer(`radar-bearing-${i}`);
-      safeRemoveSource(`radar-bearing-${i}`);
-    }
-    safeRemoveLayer('radar-bearing-labels');
-    safeRemoveSource('radar-bearing-labels');
-
-    if (!atcOnlyMode) return;
-
-    // 울산공항 좌표 (RKPU)
-    const centerLon = 129.3517;
-    const centerLat = 35.5935;
-
-    // 거리 링 생성
-    const createCircleCoords = (centerLon, centerLat, radiusNm, segments = 128) => {
-      const coords = [];
-      const radiusDeg = radiusNm / 60; // 1 degree ≈ 60 NM
-      for (let i = 0; i <= segments; i++) {
-        const angle = (i / segments) * Math.PI * 2;
-        coords.push([
-          centerLon + radiusDeg * Math.cos(angle) / Math.cos(centerLat * Math.PI / 180),
-          centerLat + radiusDeg * Math.sin(angle)
-        ]);
-      }
-      return coords;
-    };
-
-    // radarRange에 따라 링 간격 결정 (작은 범위는 10nm, 큰 범위는 50nm)
-    const ringInterval = radarRange <= 100 ? 10 : (radarRange <= 200 ? 25 : 50);
-    const numRings = Math.ceil(radarRange / ringInterval);
-
-    for (let i = 1; i <= numRings; i++) {
-      const radiusNm = i * ringInterval;
-      if (radiusNm > radarRange) break;
-      const isMajor = radiusNm % 50 === 0; // 50nm 단위는 주요 링
-      const ringCoords = createCircleCoords(centerLon, centerLat, radiusNm);
-
-      map.current.addSource(`radar-ring-${i}`, {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          geometry: { type: 'LineString', coordinates: ringCoords }
-        }
-      });
-      map.current.addLayer({
-        id: `radar-ring-${i}`,
-        type: 'line',
-        source: `radar-ring-${i}`,
-        paint: {
-          'line-color': '#00FF00',
-          'line-width': isMajor ? 1.5 : 0.5,
-          'line-opacity': isMajor ? 0.8 : 0.4
-        }
-      });
-
-      // 링 라벨 표시
-      const labelLon = centerLon;
-      const labelLat = centerLat + radiusNm / 60;
-      map.current.addSource(`radar-ring-label-${i}`, {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [labelLon, labelLat] },
-          properties: { label: `${radiusNm}` }
-        }
-      });
-      map.current.addLayer({
-        id: `radar-ring-label-${i}`,
-        type: 'symbol',
-        source: `radar-ring-label-${i}`,
-        layout: {
-          'text-field': ['get', 'label'],
-          'text-size': isMajor ? 12 : 10,
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold'],
-          'text-anchor': 'center'
-        },
-        paint: {
-          'text-color': '#00FF00',
-          'text-halo-color': '#000000',
-          'text-halo-width': 1,
-          'text-opacity': isMajor ? 1 : 0.7
-        }
-      });
-    }
-
-    // 베어링 라인 (10도 간격, 36개) - radarRange까지
-    const bearingLabelFeatures = [];
-    for (let i = 0; i < 36; i++) {
-      const bearing = i * 10;
-      const angle = (90 - bearing) * Math.PI / 180; // 북쪽 = 0도
-      const maxRadius = radarRange / 60; // radarRange nm in degrees
-
-      const endLon = centerLon + maxRadius * Math.cos(angle) / Math.cos(centerLat * Math.PI / 180);
-      const endLat = centerLat + maxRadius * Math.sin(angle);
-
-      map.current.addSource(`radar-bearing-${i}`, {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          geometry: { type: 'LineString', coordinates: [[centerLon, centerLat], [endLon, endLat]] }
-        }
-      });
-      map.current.addLayer({
-        id: `radar-bearing-${i}`,
-        type: 'line',
-        source: `radar-bearing-${i}`,
-        paint: {
-          'line-color': '#00FF00',
-          'line-width': bearing % 30 === 0 ? 1 : 0.3,
-          'line-opacity': bearing % 30 === 0 ? 0.7 : 0.3,
-          'line-dasharray': bearing % 30 === 0 ? [1, 0] : [2, 4]
-        }
-      });
-
-      // 베어링 라벨 (30도마다 외곽에 표시)
-      if (bearing % 30 === 0) {
-        const labelRadius = (radarRange + 10) / 60;
-        const labelLon = centerLon + labelRadius * Math.cos(angle) / Math.cos(centerLat * Math.PI / 180);
-        const labelLat = centerLat + labelRadius * Math.sin(angle);
-        bearingLabelFeatures.push({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [labelLon, labelLat] },
-          properties: { label: `${bearing.toString().padStart(3, '0')}°` }
-        });
-      }
-    }
-
-    // 베어링 라벨 레이어
-    map.current.addSource('radar-bearing-labels', {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: bearingLabelFeatures }
-    });
-    map.current.addLayer({
-      id: 'radar-bearing-labels',
-      type: 'symbol',
-      source: 'radar-bearing-labels',
-      layout: {
-        'text-field': ['get', 'label'],
-        'text-size': 12,
-        'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
-        'text-anchor': 'center'
-      },
-      paint: {
-        'text-color': '#00FF00',
-        'text-halo-color': '#000000',
-        'text-halo-width': 1
-      }
-    });
-
-  }, [atcOnlyMode, radarRange, mapLoaded]);
-
-  // ATC Sector 3D visualization - multiple sectors
-  useEffect(() => {
-    if (!map.current || !mapLoaded || !atcData) return;
-
-    // Helper to create circle polygon (NM to degrees approximation)
-    const createCircleCoords = (center, radiusNm, segments = 64) => {
-      const coords = [];
-      const radiusDeg = radiusNm / 60; // 1 degree ≈ 60 NM
-      for (let i = 0; i <= segments; i++) {
-        const angle = (i / segments) * Math.PI * 2;
-        coords.push([
-          center[0] + radiusDeg * Math.cos(angle),
-          center[1] + radiusDeg * Math.sin(angle) * Math.cos(center[1] * Math.PI / 180)
-        ]);
-      }
-      return [coords];
-    };
-
-    // Get all sectors and current selected set
-    const allSectors = [...(atcData.ACC || []), ...(atcData.TMA || []), ...(atcData.CTR || [])];
-    const selectedIds = Array.from(selectedAtcSectors);
-
-    // Remove only unselected sectors (not all)
-    allSectors.forEach(sector => {
-      if (!selectedAtcSectors.has(sector.id)) {
-        const sourceId = `atc-sector-${sector.id}`;
-        const layerId = `atc-layer-${sector.id}`;
-        const outlineId = `atc-outline-${sector.id}`;
-        const labelSourceId = `atc-label-source-${sector.id}`;
-        const labelLayerId = `atc-label-${sector.id}`;
-        try {
-          if (map.current.getLayer(labelLayerId)) map.current.removeLayer(labelLayerId);
-          if (map.current.getSource(labelSourceId)) map.current.removeSource(labelSourceId);
-          if (map.current.getLayer(outlineId)) map.current.removeLayer(outlineId);
-          if (map.current.getLayer(layerId)) map.current.removeLayer(layerId);
-          if (map.current.getSource(sourceId)) map.current.removeSource(sourceId);
-        } catch (e) {}
-      }
-    });
-
-    if (selectedAtcSectors.size === 0) return;
-
-    // Add layers only for newly selected sectors (skip if already exists)
-    let boundsCoords = [];
-
-    selectedIds.forEach(sectorId => {
-      // Skip if layer already exists
-      if (map.current.getLayer(`atc-layer-${sectorId}`)) return;
-      let sectorData = null;
-      let sectorType = null;
-
-      for (const acc of atcData.ACC || []) {
-        if (acc.id === sectorId) { sectorData = acc; sectorType = 'ACC'; break; }
-      }
-      if (!sectorData) {
-        for (const tma of atcData.TMA || []) {
-          if (tma.id === sectorId) { sectorData = tma; sectorType = 'TMA'; break; }
-        }
-      }
-      if (!sectorData) {
-        for (const ctr of atcData.CTR || []) {
-          if (ctr.id === sectorId) { sectorData = ctr; sectorType = 'CTR'; break; }
-        }
-      }
-
-      if (!sectorData) return;
-
-      // Get coordinates
-      let coordinates;
-      if (sectorData.coordinates) {
-        coordinates = [sectorData.coordinates];
-        boundsCoords.push(...sectorData.coordinates);
-      } else if (sectorData.center && sectorData.radius_nm) {
-        coordinates = createCircleCoords(sectorData.center, sectorData.radius_nm);
-        boundsCoords.push(sectorData.center);
-      } else {
-        return;
-      }
-
-      const sourceId = `atc-sector-${sectorId}`;
-      const layerId = `atc-layer-${sectorId}`;
-      const outlineId = `atc-outline-${sectorId}`;
-      const floorFt = sectorData.floor_ft || 0;
-      const ceilingFt = sectorData.ceiling_ft || 10000;
-      const color = sectorData.color || '#4ECDC4';
-
-      // Add source
-      map.current.addSource(sourceId, {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          geometry: { type: 'Polygon', coordinates: coordinates },
-          properties: { name: sectorData.name, floor: floorFt, ceiling: ceilingFt }
-        }
-      });
-
-      // Add 3D extrusion layer
-      map.current.addLayer({
-        id: layerId,
-        type: 'fill-extrusion',
-        source: sourceId,
-        paint: {
-          'fill-extrusion-color': color,
-          'fill-extrusion-height': ftToM(ceilingFt),
-          'fill-extrusion-base': ftToM(floorFt),
-          'fill-extrusion-opacity': 0.3
-        }
-      });
-
-      // Add outline layer
-      map.current.addLayer({
-        id: outlineId,
-        type: 'line',
-        source: sourceId,
-        paint: {
-          'line-color': color,
-          'line-width': 2,
-          'line-opacity': 0.8
-        }
-      });
-
-      // Calculate center for label
-      let centerLon, centerLat;
-      if (sectorData.center) {
-        [centerLon, centerLat] = sectorData.center;
-      } else if (sectorData.coordinates && sectorData.coordinates.length > 0) {
-        const coords = sectorData.coordinates;
-        centerLon = coords.reduce((sum, c) => sum + c[0], 0) / coords.length;
-        centerLat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
-      }
-
-      // Add label source and layer
-      if (centerLon && centerLat) {
-        const labelSourceId = `atc-label-source-${sectorId}`;
-        const labelLayerId = `atc-label-${sectorId}`;
-
-        // Extract short name (e.g., "T13" from "T13 - Osan TMA")
-        const shortName = sectorData.name.split(' - ')[0] || sectorData.name;
-
-        map.current.addSource(labelSourceId, {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [centerLon, centerLat] },
-            properties: { name: shortName }
-          }
-        });
-
-        map.current.addLayer({
-          id: labelLayerId,
-          type: 'symbol',
-          source: labelSourceId,
-          layout: {
-            'text-field': ['get', 'name'],
-            'text-size': 12,
-            'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-            'text-anchor': 'center',
-            'text-allow-overlap': true
-          },
-          paint: {
-            'text-color': '#ffffff',
-            'text-halo-color': color,
-            'text-halo-width': 2
-          }
-        });
-      }
-    });
-
-    // No automatic zoom - user controls the view
-
-  }, [selectedAtcSectors, atcData, mapLoaded]);
+  // NOTE: Radar layer, style change, chart overlay useEffects are now managed by hooks:
+  // - useRadarLayer: handles radar data fetching and layer management
+  // - useMapStyle: handles style changes, 2D/3D toggle, terrain, buildings
+  // - useChartOverlay: handles chart overlay management
+  // - useAtcRadarRings: handles ATC radar rings and bearing lines
+  // - useAtcSectors: handles ATC sector 3D visualization
 
   const toggleChart = (chartId) => setActiveCharts(prev => ({ ...prev, [chartId]: !prev[chartId] }));
   const updateChartOpacity = (chartId, opacity) => setChartOpacities(prev => ({ ...prev, [chartId]: opacity }));
@@ -3185,471 +2002,7 @@ function App() {
     fetchTrack();
   }, [selectedAircraft?.hex]);
 
-  // Korea Airspace Routes and Waypoints layer
-  useEffect(() => {
-    if (!map.current || !mapLoaded || !koreaAirspaceData) return;
-
-    const safeRemoveLayer = (id) => { try { if (map.current.getLayer(id)) map.current.removeLayer(id); } catch (e) {} };
-    const safeRemoveSource = (id) => { try { if (map.current.getSource(id)) map.current.removeSource(id); } catch (e) {} };
-
-    // Clean up existing layers
-    ['korea-routes', 'korea-routes-3d', 'korea-routes-labels', 'korea-waypoints', 'korea-waypoint-labels', 'korea-navaids', 'korea-navaid-labels',
-     'korea-airspaces-fill', 'korea-airspaces-3d', 'korea-airspaces-outline', 'korea-airspaces-labels'].forEach(safeRemoveLayer);
-    ['korea-routes', 'korea-routes-3d', 'korea-waypoints', 'korea-waypoint-labels-src', 'korea-navaids', 'korea-airspaces'].forEach(safeRemoveSource);
-
-    // Helper function to create ribbon polygon for 3D route segments
-    const createRouteRibbon = (p1, p2, width = 0.003) => {
-      const dx = p2.lon - p1.lon;
-      const dy = p2.lat - p1.lat;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len < 0.0001) return null;
-      // Perpendicular unit vector
-      const px = -dy / len * width;
-      const py = dx / len * width;
-      return [
-        [p1.lon - px, p1.lat - py],
-        [p1.lon + px, p1.lat + py],
-        [p2.lon + px, p2.lat + py],
-        [p2.lon - px, p2.lat - py],
-        [p1.lon - px, p1.lat - py] // close polygon
-      ];
-    };
-
-    // Routes layer
-    if (showKoreaRoutes && koreaAirspaceData.routes?.length > 0) {
-      // Create line features for 2D view and labels
-      const routeLineFeatures = koreaAirspaceData.routes
-        .filter(route => route.points?.length >= 2)
-        .map(route => ({
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: route.points.map(p => [p.lon, p.lat])
-          },
-          properties: {
-            name: route.name,
-            type: route.type,
-            color: route.type === 'RNAV' ? '#00BFFF' : '#FFD700'
-          }
-        }));
-
-      // Helper to clamp MEA to reasonable values (max FL600 = 60000ft)
-      const clampMEA = (mea) => {
-        if (!mea || mea <= 0) return 5000; // default
-        if (mea > 60000) return 5000; // invalid data, use default
-        return mea;
-      };
-
-      // Create 3D ribbon features for fill-extrusion
-      const route3dFeatures = [];
-      koreaAirspaceData.routes.forEach(route => {
-        if (!route.points || route.points.length < 2) return;
-        const color = route.type === 'RNAV' ? '#00BFFF' : '#FFD700';
-        for (let i = 0; i < route.points.length - 1; i++) {
-          const p1 = route.points[i];
-          const p2 = route.points[i + 1];
-          const ribbon = createRouteRibbon(p1, p2, 0.004);
-          if (!ribbon) continue;
-          // Use MEA (Minimum Enroute Altitude) for height, clamped to reasonable values
-          const alt1 = clampMEA(p1.mea_ft);
-          const alt2 = clampMEA(p2.mea_ft);
-          const avgAltM = ftToM((alt1 + alt2) / 2);
-          route3dFeatures.push({
-            type: 'Feature',
-            geometry: { type: 'Polygon', coordinates: [ribbon] },
-            properties: {
-              name: route.name,
-              color: color,
-              height: avgAltM + 50, // Slight thickness
-              base: avgAltM
-            }
-          });
-        }
-      });
-
-      if (routeLineFeatures.length > 0) {
-        map.current.addSource('korea-routes', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: routeLineFeatures }
-        });
-
-        // 3D view: use fill-extrusion for routes
-        if (is3DView && show3DAltitude && route3dFeatures.length > 0) {
-          map.current.addSource('korea-routes-3d', {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features: route3dFeatures }
-          });
-          map.current.addLayer({
-            id: 'korea-routes-3d',
-            type: 'fill-extrusion',
-            source: 'korea-routes-3d',
-            paint: {
-              'fill-extrusion-color': ['get', 'color'],
-              'fill-extrusion-height': ['get', 'height'],
-              'fill-extrusion-base': ['get', 'base'],
-              'fill-extrusion-opacity': 0.7
-            }
-          });
-        } else {
-          // 2D view: use line layer
-          map.current.addLayer({
-            id: 'korea-routes',
-            type: 'line',
-            source: 'korea-routes',
-            paint: {
-              'line-color': ['get', 'color'],
-              'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1, 8, 2, 12, 3],
-              'line-opacity': 0.7,
-              'line-dasharray': [2, 1]
-            }
-          });
-        }
-
-        // Route name labels along the line
-        map.current.addLayer({
-          id: 'korea-routes-labels',
-          type: 'symbol',
-          source: 'korea-routes',
-          minzoom: 6,
-          layout: {
-            'symbol-placement': 'line',
-            'text-field': ['get', 'name'],
-            'text-size': 11,
-            'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
-            'text-rotation-alignment': 'map',
-            'text-allow-overlap': false,
-            'symbol-spacing': 300
-          },
-          paint: {
-            'text-color': ['get', 'color'],
-            'text-halo-color': 'rgba(0,0,0,0.9)',
-            'text-halo-width': 1.5
-          }
-        });
-      }
-    }
-
-    // Waypoints layer - 3D mode shows at altitude
-    if (showKoreaWaypoints && koreaAirspaceData.waypoints?.length > 0) {
-      // Create a map of waypoint altitudes from route data (clamp to reasonable values)
-      const waypointAltitudes = {};
-      if (koreaAirspaceData.routes) {
-        koreaAirspaceData.routes.forEach(route => {
-          if (route.points) {
-            route.points.forEach(p => {
-              if (p.name && p.mea_ft && p.mea_ft > 0 && p.mea_ft <= 60000) {
-                // Keep highest altitude for each waypoint (only valid altitudes)
-                if (!waypointAltitudes[p.name] || waypointAltitudes[p.name] < p.mea_ft) {
-                  waypointAltitudes[p.name] = p.mea_ft;
-                }
-              }
-            });
-          }
-        });
-      }
-
-      // 3D waypoints as small cylinders at altitude
-      if (is3DView && show3DAltitude) {
-        const wp3dFeatures = [];
-        koreaAirspaceData.waypoints.forEach(wp => {
-          const altFt = waypointAltitudes[wp.name] || 5000; // Default 5000ft if not found
-          const altM = ftToM(altFt);
-          // Create small diamond shape for waypoint
-          const size = 0.008;
-          const coords = [
-            [wp.lon, wp.lat + size],
-            [wp.lon + size, wp.lat],
-            [wp.lon, wp.lat - size],
-            [wp.lon - size, wp.lat],
-            [wp.lon, wp.lat + size]
-          ];
-          wp3dFeatures.push({
-            type: 'Feature',
-            geometry: { type: 'Polygon', coordinates: [coords] },
-            properties: {
-              name: wp.name,
-              height: altM + 100,
-              base: altM,
-              color: '#00FF7F'
-            }
-          });
-        });
-
-        map.current.addSource('korea-waypoints', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: wp3dFeatures }
-        });
-        map.current.addLayer({
-          id: 'korea-waypoints',
-          type: 'fill-extrusion',
-          source: 'korea-waypoints',
-          paint: {
-            'fill-extrusion-color': ['get', 'color'],
-            'fill-extrusion-height': ['get', 'height'],
-            'fill-extrusion-base': ['get', 'base'],
-            'fill-extrusion-opacity': 0.8
-          }
-        });
-      } else {
-        // 2D mode - use circles
-        const wpFeatures = koreaAirspaceData.waypoints.map(wp => ({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [wp.lon, wp.lat] },
-          properties: { name: wp.name, type: wp.type }
-        }));
-
-        map.current.addSource('korea-waypoints', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: wpFeatures }
-        });
-        map.current.addLayer({
-          id: 'korea-waypoints',
-          type: 'circle',
-          source: 'korea-waypoints',
-          paint: {
-            'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 2, 10, 4, 14, 6],
-            'circle-color': '#00FF7F',
-            'circle-stroke-width': 1,
-            'circle-stroke-color': '#ffffff'
-          }
-        });
-      }
-      // Waypoint labels - need separate source for 3D mode with Point geometry
-      if (is3DView && show3DAltitude) {
-        // Create point features with altitude for labels
-        const labelFeatures = koreaAirspaceData.waypoints.map(wp => {
-          const altFt = waypointAltitudes[wp.name] || null;
-          const altM = altFt ? ftToM(altFt) : 0;
-          return {
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [wp.lon, wp.lat, altM] },
-            properties: {
-              name: wp.name,
-              altitude_ft: altFt,
-              label: altFt ? `${wp.name}\n${altFt}ft` : wp.name
-            }
-          };
-        });
-        map.current.addSource('korea-waypoint-labels-src', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: labelFeatures }
-        });
-        map.current.addLayer({
-          id: 'korea-waypoint-labels',
-          type: 'symbol',
-          source: 'korea-waypoint-labels-src',
-          minzoom: 7,
-          layout: {
-            'text-field': ['get', 'label'],
-            'text-size': 10,
-            'text-offset': [0, -1],
-            'text-anchor': 'bottom',
-            'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold'],
-            'symbol-z-elevate': true
-          },
-          paint: {
-            'text-color': '#00FF7F',
-            'text-halo-color': 'rgba(0,0,0,0.8)',
-            'text-halo-width': 1
-          }
-        });
-      } else {
-        // 2D mode - add altitude info to labels
-        const labelFeatures = koreaAirspaceData.waypoints.map(wp => {
-          const altFt = waypointAltitudes[wp.name] || null;
-          return {
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [wp.lon, wp.lat] },
-            properties: {
-              name: wp.name,
-              altitude_ft: altFt,
-              label: altFt ? `${wp.name}\n${altFt}ft` : wp.name
-            }
-          };
-        });
-        map.current.addSource('korea-waypoint-labels-src', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: labelFeatures }
-        });
-        map.current.addLayer({
-          id: 'korea-waypoint-labels',
-          type: 'symbol',
-          source: 'korea-waypoint-labels-src',
-          minzoom: 8,
-          layout: {
-            'text-field': ['get', 'label'],
-            'text-size': 10,
-            'text-offset': [0, 1],
-            'text-anchor': 'top',
-            'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold']
-          },
-          paint: {
-            'text-color': '#00FF7F',
-            'text-halo-color': 'rgba(0,0,0,0.8)',
-            'text-halo-width': 1
-          }
-        });
-      }
-    }
-
-    // NAVAIDs layer
-    if (showKoreaNavaids && koreaAirspaceData.navaids?.length > 0) {
-      const navaidFeatures = koreaAirspaceData.navaids.map(nav => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [nav.lon, nav.lat] },
-        properties: {
-          name: nav.ident || nav.name,
-          type: nav.type,
-          freq: nav.freq,
-          label: `${nav.ident || ''} ${nav.type}\n${nav.freq || ''}MHz`
-        }
-      }));
-
-      map.current.addSource('korea-navaids', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: navaidFeatures }
-      });
-      map.current.addLayer({
-        id: 'korea-navaids',
-        type: 'circle',
-        source: 'korea-navaids',
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 4, 10, 8, 14, 12],
-          'circle-color': '#FF69B4',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff'
-        }
-      });
-      map.current.addLayer({
-        id: 'korea-navaid-labels',
-        type: 'symbol',
-        source: 'korea-navaids',
-        minzoom: 7,
-        layout: {
-          'text-field': ['get', 'label'],
-          'text-size': 11,
-          'text-offset': [0, 1.5],
-          'text-anchor': 'top',
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold']
-        },
-        paint: {
-          'text-color': '#FF69B4',
-          'text-halo-color': 'rgba(0,0,0,0.8)',
-          'text-halo-width': 1
-        }
-      });
-    }
-
-    // Airspaces layer (PRD, MOA, CATA, UA)
-    if (showKoreaAirspaces && koreaAirspaceData.airspaces?.length > 0) {
-      // 공역 유형별 색상
-      const airspaceColors = {
-        'P': '#FF0000',    // Prohibited - Red
-        'R': '#FFA500',    // Restricted - Orange
-        'D': '#FFFF00',    // Danger - Yellow
-        'MOA': '#800080',  // Military - Purple
-        'HTA': '#9932CC',  // Helicopter Training - Dark Orchid
-        'CATA': '#4169E1', // Civil Aircraft Training - Royal Blue
-        'UA': '#32CD32',   // Ultralight - Lime Green
-        'ALERT': '#FF6347' // Alert - Tomato
-      };
-
-      const airspaceFeatures = koreaAirspaceData.airspaces
-        .filter(asp => asp.boundary && asp.boundary.length >= 3)
-        .map(asp => {
-          // Close the polygon if not closed
-          let boundary = [...asp.boundary];
-          if (boundary.length > 0) {
-            const first = boundary[0];
-            const last = boundary[boundary.length - 1];
-            if (first[0] !== last[0] || first[1] !== last[1]) {
-              boundary.push([first[0], first[1]]);
-            }
-          }
-          return {
-            type: 'Feature',
-            geometry: {
-              type: 'Polygon',
-              coordinates: [boundary]
-            },
-            properties: {
-              name: asp.name,
-              type: asp.type,
-              category: asp.category,
-              color: airspaceColors[asp.type] || '#808080',
-              upper_limit: asp.upper_limit_ft || 5000,
-              lower_limit: asp.lower_limit_ft || 0,
-              upperAltM: ftToM(asp.upper_limit_ft || 5000),
-              lowerAltM: ftToM(asp.lower_limit_ft || 0),
-              active_time: asp.active_time || ''
-            }
-          };
-        });
-
-      map.current.addSource('korea-airspaces', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: airspaceFeatures }
-      });
-
-      // 3D view: use fill-extrusion for airspaces
-      if (is3DView && show3DAltitude) {
-        map.current.addLayer({
-          id: 'korea-airspaces-3d',
-          type: 'fill-extrusion',
-          source: 'korea-airspaces',
-          paint: {
-            'fill-extrusion-color': ['get', 'color'],
-            'fill-extrusion-height': ['get', 'upperAltM'],
-            'fill-extrusion-base': ['get', 'lowerAltM'],
-            'fill-extrusion-opacity': 0.25
-          }
-        });
-      } else {
-        // 2D view: use fill layer
-        map.current.addLayer({
-          id: 'korea-airspaces-fill',
-          type: 'fill',
-          source: 'korea-airspaces',
-          paint: {
-            'fill-color': ['get', 'color'],
-            'fill-opacity': 0.15
-          }
-        });
-      }
-
-      // Outline layer (always show)
-      map.current.addLayer({
-        id: 'korea-airspaces-outline',
-        type: 'line',
-        source: 'korea-airspaces',
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 2,
-          'line-opacity': 0.8
-        }
-      });
-
-      // Labels
-      map.current.addLayer({
-        id: 'korea-airspaces-labels',
-        type: 'symbol',
-        source: 'korea-airspaces',
-        minzoom: 6,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': 10,
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold'],
-          'text-allow-overlap': false,
-          'symbol-placement': 'point'
-        },
-        paint: {
-          'text-color': ['get', 'color'],
-          'text-halo-color': 'rgba(0,0,0,0.8)',
-          'text-halo-width': 1
-        }
-      });
-    }
-  }, [mapLoaded, koreaAirspaceData, showKoreaRoutes, showKoreaWaypoints, showKoreaNavaids, showKoreaAirspaces, is3DView, show3DAltitude]);
+  // NOTE: Korea Airspace Routes and Waypoints layer is now managed by useKoreaAirspace hook
 
   // Wind thread animation - thin silk-like threads with fade in/out
   useEffect(() => {
@@ -4018,910 +2371,180 @@ function App() {
       <div ref={mapContainer} id="map" style={{ height: `${windowHeight}px` }} />
 
       {/* Time & Weather Display */}
-      <div className="time-weather-display">
-        <div className="time-display">
-          <span className="time-utc">{formatUTC(currentTime)}</span>
-          <span className="time-separator">|</span>
-          <span className="time-kst">{formatKST(currentTime)}</span>
-        </div>
-        {weatherData?.metar && (
-          <div className="weather-compact">
-            <span className="wx-label">METAR</span>
-            <span className={`wx-cat ${weatherData.metar.fltCat?.toLowerCase() || 'vfr'}`}>{weatherData.metar.fltCat || 'VFR'}</span>
-            <span className="wx-time" title="관측시간 (KST)">{parseMetarTime(weatherData.metar)}</span>
-            {parseMetar(weatherData.metar)?.wind && <span className="wx-item" title={parseMetar(weatherData.metar).windMs}>{parseMetar(weatherData.metar).wind}</span>}
-            {parseMetar(weatherData.metar)?.visibility && <span className="wx-item">{parseMetar(weatherData.metar).visibility}</span>}
-            {parseMetar(weatherData.metar)?.rvr && <span className="wx-item wx-rvr">{parseMetar(weatherData.metar).rvr}</span>}
-            {parseMetar(weatherData.metar)?.temp && <span className="wx-item">{parseMetar(weatherData.metar).temp}</span>}
-            {weatherData.metar.altim && <span className="wx-item">Q{weatherData.metar.altim}</span>}
-            <button
-              className={`wx-metar-btn ${metarPinned ? 'pinned' : ''}`}
-              onMouseEnter={() => !metarPinned && setShowMetarPopup(true)}
-              onMouseLeave={() => !metarPinned && setShowMetarPopup(false)}
-              onClick={() => { setMetarPinned(!metarPinned); setShowMetarPopup(!metarPinned); }}
-            >
-              METAR
-            </button>
-            {weatherData?.taf && (
-              <button
-                className={`wx-metar-btn ${tafPinned ? 'pinned' : ''}`}
-                onMouseEnter={() => !tafPinned && setShowTafPopup(true)}
-                onMouseLeave={() => !tafPinned && setShowTafPopup(false)}
-                onClick={() => { setTafPinned(!tafPinned); setShowTafPopup(!tafPinned); }}
-              >
-                TAF
-              </button>
-            )}
-          </div>
-        )}
-        {(showMetarPopup || metarPinned) && weatherData?.metar && (
-          <div className="metar-popup metar-popup-compact">
-            <div className="metar-compact-row">
-              <span className="mc-item"><b>Wind</b> {parseMetar(weatherData.metar)?.wind} ({weatherData.metar.wspdMs}m/s)</span>
-              <span className="mc-item"><b>Vis</b> {weatherData.metar.visibM}m</span>
-              {(weatherData.metar.lRvr || weatherData.metar.rRvr) && <span className="mc-item mc-rvr"><b>RVR</b> {weatherData.metar.lRvr || '-'}/{weatherData.metar.rRvr || '-'}m</span>}
-              <span className="mc-item"><b>Temp</b> {weatherData.metar.temp}/{weatherData.metar.dewp}°C</span>
-              <span className="mc-item"><b>QNH</b> {weatherData.metar.altim}</span>
-              {weatherData.metar.ceiling && <span className="mc-item"><b>Ceil</b> {weatherData.metar.ceiling}ft</span>}
-            </div>
-            <div className="metar-raw-line">{weatherData.metar.rawOb}</div>
-          </div>
-        )}
-        {(showTafPopup || tafPinned) && weatherData?.taf && (
-          <div className="metar-popup taf-popup">
-            <div className="metar-popup-section">
-              <div className="metar-popup-label">TAF</div>
-              <div className="metar-popup-text">{weatherData.taf.rawTAF}</div>
-            </div>
-          </div>
-        )}
-      </div>
+      <TimeWeatherBar
+        currentTime={currentTime}
+        weatherData={weatherData}
+        showMetarPopup={showMetarPopup}
+        setShowMetarPopup={setShowMetarPopup}
+        metarPinned={metarPinned}
+        setMetarPinned={setMetarPinned}
+        showTafPopup={showTafPopup}
+        setShowTafPopup={setShowTafPopup}
+        tafPinned={tafPinned}
+        setTafPinned={setTafPinned}
+        parseMetar={parseMetar}
+        parseMetarTime={parseMetarTime}
+      />
 
       {/* View Controls */}
-      <div className="view-controls">
-        <button className={`view-btn ${is3DView ? 'active' : ''}`} onClick={() => setIs3DView(true)}>3D</button>
-        <button className={`view-btn ${!is3DView ? 'active' : ''}`} onClick={() => setIs3DView(false)}>2D</button>
-        <button className="view-btn icon-btn" onClick={() => setIsDarkMode(!isDarkMode)} title={isDarkMode ? '라이트 모드' : '다크 모드'}>{isDarkMode ? '🌙' : '☀️'}</button>
-        <button className={`view-btn icon-btn ${showSatellite ? 'active' : ''}`} onClick={() => setShowSatellite(!showSatellite)} title="위성 사진">🛰️</button>
-        <div className="wx-dropdown-wrapper">
-          <button className={`view-btn ${wxLayersExpanded ? 'active' : ''}`} onClick={() => setWxLayersExpanded(!wxLayersExpanded)} title="기상정보">기상</button>
-          {wxLayersExpanded && (
-            <div className="wx-dropdown">
-              <div className={`wx-dropdown-item ${showRadar ? 'active' : ''}`} onClick={() => setShowRadar(!showRadar)}>
-                <input type="checkbox" checked={showRadar} readOnly />
-                <span>레이더</span>
-              </div>
-              <div className={`wx-dropdown-item ${showSatelliteWx ? 'active' : ''}`} onClick={() => setShowSatelliteWx(!showSatelliteWx)}>
-                <input type="checkbox" checked={showSatelliteWx} readOnly />
-                <span>위성영상</span>
-              </div>
-              <div className={`wx-dropdown-item ${showLightning ? 'active' : ''}`} onClick={() => setShowLightning(!showLightning)}>
-                <input type="checkbox" checked={showLightning} readOnly />
-                <span>낙뢰</span>
-              </div>
-              <div className={`wx-dropdown-item ${showSigmet ? 'active' : ''}`} onClick={() => setShowSigmet(!showSigmet)}>
-                <input type="checkbox" checked={showSigmet} readOnly />
-                <span>SIGMET</span>
-              </div>
-              <div className="wx-dropdown-divider"></div>
-              <div className="wx-dropdown-item" onClick={() => setShowWxPanel(true)}>
-                <span>상세 기상정보 ▶</span>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="atc-dropdown-wrapper">
-          <button className={`view-btn ${showAtcPanel || atcOnlyMode ? 'active' : ''}`} onClick={() => setShowAtcPanel(!showAtcPanel)} title="관제구역">관제</button>
-          {showAtcPanel && atcData && (
-            <div className="atc-dropdown">
-              <div className="atc-dropdown-header">
-                <span className="atc-dropdown-title">{atcData.FIR.name}</span>
-                <button className="atc-clear-btn" onClick={() => setSelectedAtcSectors(new Set())}>초기화</button>
-              </div>
-              <div className="atc-dropdown-batch" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px', marginBottom: '8px' }}>
-                <button
-                  className={`atc-mini-btn ${atcOnlyMode ? 'active' : ''}`}
-                  style={{ width: '100%', background: atcOnlyMode ? '#00FF00' : 'rgba(0,255,0,0.2)', color: atcOnlyMode ? '#000' : '#00FF00' }}
-                  onClick={() => {
-                    setAtcOnlyMode(!atcOnlyMode);
-                    if (!atcOnlyMode) {
-                      // 레이더 모드 켜기: 검은 배경으로 변경하고 공항 중심으로 이동
-                      setIsDarkMode(true);
-                      setShowSatellite(false);
-                      if (map.current) {
-                        map.current.flyTo({ center: [129.3517, 35.5935], zoom: 5, pitch: 0, bearing: 0, duration: 1000 });
-                      }
-                    }
-                  }}
-                >
-                  📡 레이더 뷰 ({radarRange}nm)
-                </button>
-                {atcOnlyMode && (
-                  <div style={{ marginTop: '8px', padding: '4px 0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#00FF00', marginBottom: '4px' }}>
-                      <span>범위:</span>
-                      <span>{radarRange}nm</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="50"
-                      max="500"
-                      step="50"
-                      value={radarRange}
-                      onChange={(e) => setRadarRange(parseInt(e.target.value))}
-                      style={{ width: '100%', accentColor: '#00FF00' }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#888', marginTop: '2px' }}>
-                      <span>50</span>
-                      <span>150</span>
-                      <span>300</span>
-                      <span>500</span>
-                    </div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', fontSize: '11px', color: '#00FF00', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={radarBlackBackground}
-                        onChange={(e) => setRadarBlackBackground(e.target.checked)}
-                        style={{ accentColor: '#00FF00' }}
-                      />
-                      검은 배경
-                    </label>
-                  </div>
-                )}
-              </div>
-              <div className="atc-dropdown-batch">
-                <button className={`atc-mini-btn ${atcData.ACC.every(s => selectedAtcSectors.has(s.id)) ? 'active' : ''}`}
-                  onClick={() => {
-                    const ids = atcData.ACC.map(s => s.id);
-                    const all = ids.every(id => selectedAtcSectors.has(id));
-                    setSelectedAtcSectors(prev => { const n = new Set(prev); ids.forEach(id => all ? n.delete(id) : n.add(id)); return n; });
-                  }}>ACC ({atcData.ACC.length})</button>
-                <button className={`atc-mini-btn ${atcData.TMA.every(s => selectedAtcSectors.has(s.id)) ? 'active' : ''}`}
-                  onClick={() => {
-                    const ids = atcData.TMA.map(s => s.id);
-                    const all = ids.every(id => selectedAtcSectors.has(id));
-                    setSelectedAtcSectors(prev => { const n = new Set(prev); ids.forEach(id => all ? n.delete(id) : n.add(id)); return n; });
-                  }}>TMA ({atcData.TMA.length})</button>
-                <button className={`atc-mini-btn ${atcData.CTR.every(s => selectedAtcSectors.has(s.id)) ? 'active' : ''}`}
-                  onClick={() => {
-                    const ids = atcData.CTR.map(s => s.id);
-                    const all = ids.every(id => selectedAtcSectors.has(id));
-                    setSelectedAtcSectors(prev => { const n = new Set(prev); ids.forEach(id => all ? n.delete(id) : n.add(id)); return n; });
-                  }}>CTR ({atcData.CTR.length})</button>
-              </div>
-              <div className="atc-dropdown-sections">
-                {/* ACC */}
-                <div className="atc-dropdown-section">
-                  <div className="atc-section-label" onClick={() => setAtcExpanded(p => ({ ...p, ACC: !p.ACC }))}>
-                    ACC <span className={`atc-expand-icon ${atcExpanded.ACC ? 'expanded' : ''}`}>▼</span>
-                  </div>
-                  {atcExpanded.ACC && (
-                    <div className="atc-grid">
-                      {atcData.ACC.map(s => (
-                        <label key={s.id} className={`atc-chip ${selectedAtcSectors.has(s.id) ? 'selected' : ''}`} title={`${s.name}\n${s.vertical_limits}`}>
-                          <input type="checkbox" checked={selectedAtcSectors.has(s.id)} onChange={e => setSelectedAtcSectors(prev => { const n = new Set(prev); e.target.checked ? n.add(s.id) : n.delete(s.id); return n; })} />
-                          <span className="atc-chip-color" style={{ background: s.color }}></span>
-                          <span className="atc-chip-name">{s.name.replace(/Daegu ACC - |Incheon ACC - /g, '')}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {/* TMA */}
-                <div className="atc-dropdown-section">
-                  <div className="atc-section-label" onClick={() => setAtcExpanded(p => ({ ...p, TMA: !p.TMA }))}>
-                    TMA <span className={`atc-expand-icon ${atcExpanded.TMA ? 'expanded' : ''}`}>▼</span>
-                  </div>
-                  {atcExpanded.TMA && (
-                    <div className="atc-grid">
-                      {atcData.TMA.map(s => (
-                        <label key={s.id} className={`atc-chip ${selectedAtcSectors.has(s.id) ? 'selected' : ''}`} title={`${s.name}\n${s.vertical_limits}`}>
-                          <input type="checkbox" checked={selectedAtcSectors.has(s.id)} onChange={e => setSelectedAtcSectors(prev => { const n = new Set(prev); e.target.checked ? n.add(s.id) : n.delete(s.id); return n; })} />
-                          <span className="atc-chip-color" style={{ background: s.color }}></span>
-                          <span className="atc-chip-name">{s.name.replace(/ - .* TMA| TMA/g, '')}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {/* CTR */}
-                <div className="atc-dropdown-section">
-                  <div className="atc-section-label" onClick={() => setAtcExpanded(p => ({ ...p, CTR: !p.CTR }))}>
-                    CTR <span className={`atc-expand-icon ${atcExpanded.CTR ? 'expanded' : ''}`}>▼</span>
-                  </div>
-                  {atcExpanded.CTR && (
-                    <div className="atc-grid">
-                      {atcData.CTR.map(s => (
-                        <label key={s.id} className={`atc-chip ${selectedAtcSectors.has(s.id) ? 'selected' : ''}`} title={`${s.name}\n${s.vertical_limits || ''}`}>
-                          <input type="checkbox" checked={selectedAtcSectors.has(s.id)} onChange={e => setSelectedAtcSectors(prev => { const n = new Set(prev); e.target.checked ? n.add(s.id) : n.delete(s.id); return n; })} />
-                          <span className="atc-chip-color" style={{ background: s.color }}></span>
-                          <span className="atc-chip-name">{s.name.replace(/ CTR/g, '')}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="notam-dropdown-wrapper">
-          <button className={`view-btn ${showNotamPanel ? 'active' : ''}`} onClick={() => setShowNotamPanel(!showNotamPanel)} title="NOTAM">NOTAM</button>
-          {showNotamPanel && (
-            <div className="notam-dropdown">
-              <div className="notam-dropdown-header">
-                <span className="notam-dropdown-title">NOTAM</span>
-                <div className="notam-header-controls">
-                  <select
-                    className="notam-period-select"
-                    value={notamPeriod}
-                    onChange={(e) => setNotamPeriod(e.target.value)}
-                    title="기간"
-                  >
-                    <option value="current">현재 유효</option>
-                    <option value="1month">1개월</option>
-                    <option value="1year">1년</option>
-                    <option value="all">전체</option>
-                  </select>
-                  <select
-                    className="notam-location-select"
-                    value={notamLocationFilter}
-                    onChange={(e) => setNotamLocationFilter(e.target.value)}
-                  >
-                    <option value="">전체 지역</option>
-                    {(() => {
-                      const locations = [...new Set(notamData?.data?.map(n => n.location).filter(Boolean))];
-                      const counts = {};
-                      locations.forEach(loc => {
-                        counts[loc] = notamData.data.filter(n => n.location === loc).length;
-                      });
+      <ViewControlsBar
+        is3DView={is3DView}
+        setIs3DView={setIs3DView}
+        isDarkMode={isDarkMode}
+        setIsDarkMode={setIsDarkMode}
+        showSatellite={showSatellite}
+        setShowSatellite={setShowSatellite}
+        wxLayersExpanded={wxLayersExpanded}
+        setWxLayersExpanded={setWxLayersExpanded}
+        showRadar={showRadar}
+        setShowRadar={setShowRadar}
+        showSatelliteWx={showSatelliteWx}
+        setShowSatelliteWx={setShowSatelliteWx}
+        showLightning={showLightning}
+        setShowLightning={setShowLightning}
+        showSigmet={showSigmet}
+        setShowSigmet={setShowSigmet}
+        setShowWxPanel={setShowWxPanel}
+        showAtcPanel={showAtcPanel}
+        setShowAtcPanel={setShowAtcPanel}
+        atcOnlyMode={atcOnlyMode}
+        setAtcOnlyMode={setAtcOnlyMode}
+        atcData={atcData}
+        selectedAtcSectors={selectedAtcSectors}
+        setSelectedAtcSectors={setSelectedAtcSectors}
+        atcExpanded={atcExpanded}
+        setAtcExpanded={setAtcExpanded}
+        radarRange={radarRange}
+        setRadarRange={setRadarRange}
+        radarBlackBackground={radarBlackBackground}
+        setRadarBlackBackground={setRadarBlackBackground}
+        map={map}
+        showNotamPanel={showNotamPanel}
+        setShowNotamPanel={setShowNotamPanel}
+        notamData={notamData}
+        notamLoading={notamLoading}
+        notamError={notamError}
+        notamCacheAge={notamCacheAge}
+        notamPeriod={notamPeriod}
+        setNotamPeriod={setNotamPeriod}
+        notamLocationFilter={notamLocationFilter}
+        setNotamLocationFilter={setNotamLocationFilter}
+        notamFilter={notamFilter}
+        setNotamFilter={setNotamFilter}
+        notamExpanded={notamExpanded}
+        setNotamExpanded={setNotamExpanded}
+        notamLocationsOnMap={notamLocationsOnMap}
+        setNotamLocationsOnMap={setNotamLocationsOnMap}
+        fetchNotamData={fetchNotamData}
+      />
 
-                      // 국제공항
-                      const intlAirports = locations.filter(loc => KOREA_AIRPORTS[loc]?.type === 'international').sort();
-                      // 국내공항
-                      const domesticAirports = locations.filter(loc => KOREA_AIRPORTS[loc]?.type === 'domestic').sort();
-                      // FIR/기타
-                      const firOther = locations.filter(loc => KOREA_AIRPORTS[loc]?.type === 'fir').sort();
-                      // 알 수 없는 지역
-                      const others = locations.filter(loc => !KOREA_AIRPORTS[loc]).sort();
-
-                      return (
-                        <>
-                          {intlAirports.length > 0 && (
-                            <optgroup label="🌏 국제공항">
-                              {intlAirports.map(loc => (
-                                <option key={loc} value={loc}>{loc} {KOREA_AIRPORTS[loc]?.name} ({counts[loc]})</option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {domesticAirports.length > 0 && (
-                            <optgroup label="🏠 국내공항">
-                              {domesticAirports.map(loc => (
-                                <option key={loc} value={loc}>{loc} {KOREA_AIRPORTS[loc]?.name} ({counts[loc]})</option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {firOther.length > 0 && (
-                            <optgroup label="📡 FIR/ACC">
-                              {firOther.map(loc => (
-                                <option key={loc} value={loc}>{loc} {KOREA_AIRPORTS[loc]?.name} ({counts[loc]})</option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {others.length > 0 && (
-                            <optgroup label="기타">
-                              {others.map(loc => (
-                                <option key={loc} value={loc}>{loc} ({counts[loc]})</option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </select>
-                  <button className="notam-refresh-btn" onClick={() => fetchNotamData(notamPeriod, true)} title="새로고침 (캐시 무시)">↻</button>
-                  {notamCacheAge !== null && (
-                    <span className="notam-cache-info" title="캐시된 데이터 사용 중">
-                      📦 {Math.floor(notamCacheAge / 1000)}초 전
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="notam-search">
-                <input
-                  type="text"
-                  placeholder="검색 (NOTAM 번호, 내용...)"
-                  value={notamFilter}
-                  onChange={(e) => setNotamFilter(e.target.value)}
-                  className="notam-search-input"
-                />
-              </div>
-              {/* 지도에 표시할 공항 선택 - 국가별 그룹화 */}
-              <div className="notam-map-toggle-section">
-                <span className="notam-map-toggle-label">지도 표시 필터 (좌표 있는 공항만):</span>
-                {(() => {
-                  const locations = [...new Set(notamData?.data?.map(n => n.location).filter(Boolean))];
-
-                  // 좌표 있는 공항만 필터 (Q-line 좌표 또는 AIRPORT_COORDINATES)
-                  const locationsWithCoords = locations.filter(loc => AIRPORT_COORDINATES[loc]);
-                  const locationsNoCoords = locations.filter(loc => !AIRPORT_COORDINATES[loc]);
-
-                  // 국가별로 그룹화 (좌표 있는 것만)
-                  const byCountry = {};
-                  locationsWithCoords.forEach(loc => {
-                    const info = AIRPORT_DATABASE[loc];
-                    const country = info?.country || 'OTHER';
-                    if (!byCountry[country]) byCountry[country] = [];
-                    byCountry[country].push(loc);
-                  });
-
-                  // 국가 우선순위 (한국 먼저)
-                  const countryOrder = ['KR', 'JP', 'CN', 'TW', 'HK', 'VN', 'TH', 'SG', 'PH', 'US', 'OTHER'];
-                  const sortedCountries = Object.keys(byCountry).sort((a, b) => {
-                    const ai = countryOrder.indexOf(a);
-                    const bi = countryOrder.indexOf(b);
-                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-                  });
-
-                  return (
-                    <>
-                      {sortedCountries.map(country => {
-                        const countryInfo = COUNTRY_INFO[country];
-                        const countryName = countryInfo?.name || '기타';
-                        const countryFlag = countryInfo?.flag || '🌐';
-                        const airportsInCountry = byCountry[country].sort();
-
-                        // 한국은 타입별로 세분화
-                        if (country === 'KR') {
-                          const hub = airportsInCountry.filter(loc => AIRPORT_DATABASE[loc]?.type === 'hub');
-                          const general = airportsInCountry.filter(loc => AIRPORT_DATABASE[loc]?.type === 'general');
-                          const military = airportsInCountry.filter(loc => AIRPORT_DATABASE[loc]?.type === 'military');
-                          const fir = airportsInCountry.filter(loc => AIRPORT_DATABASE[loc]?.type === 'fir');
-                          const other = airportsInCountry.filter(loc => !['hub', 'general', 'military', 'fir'].includes(AIRPORT_DATABASE[loc]?.type));
-
-                          // 공항별 NOTAM 수 계산 (유효한 것만: NOTAMC 제외, 만료된 것 제외)
-                          const notamCounts = {};
-                          const cancelledSetForCount = buildCancelledNotamSet(notamData?.data || []);
-                          notamData?.data?.forEach(n => {
-                            // NOTAMC 타입은 제외
-                            const nType = getNotamType(n.full_text);
-                            if (nType === 'C') return;
-                            // 만료된 것도 제외
-                            const validity = getNotamValidity(n, cancelledSetForCount);
-                            if (!validity) return;
-                            notamCounts[n.location] = (notamCounts[n.location] || 0) + 1;
-                          });
-
-                          const renderChips = (locs, label) => locs.length > 0 && (
-                            <div className="notam-country-subgroup" key={label}>
-                              <span className="notam-subgroup-label">{label}</span>
-                              <div className="notam-map-location-chips">
-                                {locs.map(loc => {
-                                  const isActive = notamLocationsOnMap.has(loc);
-                                  const info = AIRPORT_DATABASE[loc];
-                                  const shortName = info?.name?.replace('국제공항', '').replace('공항', '').replace('비행장', '') || loc;
-                                  const count = notamCounts[loc] || 0;
-                                  return (
-                                    <button
-                                      key={loc}
-                                      className={`notam-map-chip ${isActive ? 'active' : ''} ${info?.type || 'other'}`}
-                                      onClick={() => {
-                                        const newSet = new Set(notamLocationsOnMap);
-                                        isActive ? newSet.delete(loc) : newSet.add(loc);
-                                        setNotamLocationsOnMap(newSet);
-                                      }}
-                                      title={`${loc} ${info?.name || ''} (${count}건) - 지도에 ${isActive ? '숨기기' : '표시'}`}
-                                    >
-                                      {loc} {shortName !== loc ? shortName : ''} ({count})
-                                    </button>
-                                  );
-                                })}
-                                <button
-                                  className="notam-select-all-btn"
-                                  onClick={() => {
-                                    const newSet = new Set(notamLocationsOnMap);
-                                    const allSelected = locs.every(loc => newSet.has(loc));
-                                    locs.forEach(loc => allSelected ? newSet.delete(loc) : newSet.add(loc));
-                                    setNotamLocationsOnMap(newSet);
-                                  }}
-                                >
-                                  {locs.every(loc => notamLocationsOnMap.has(loc)) ? '전체해제' : '전체선택'}
-                                </button>
-                              </div>
-                            </div>
-                          );
-
-                          return (
-                            <div className="notam-country-group" key={country}>
-                              <div className="notam-country-header">{countryFlag} {countryName}</div>
-                              {renderChips(hub, '거점공항')}
-                              {renderChips(general, '일반공항')}
-                              {renderChips(military, '군공항')}
-                              {renderChips(fir, 'FIR/ACC')}
-                              {renderChips(other, '기타')}
-                            </div>
-                          );
-                        }
-
-                        // 다른 국가는 단순 리스트
-                        // 공항별 NOTAM 수 계산 (유효한 것만)
-                        const notamCountsOther = {};
-                        const cancelledSetOther = buildCancelledNotamSet(notamData?.data || []);
-                        notamData?.data?.forEach(n => {
-                          const nType = getNotamType(n.full_text);
-                          if (nType === 'C') return;
-                          const validity = getNotamValidity(n, cancelledSetOther);
-                          if (!validity) return;
-                          notamCountsOther[n.location] = (notamCountsOther[n.location] || 0) + 1;
-                        });
-
-                        return (
-                          <div className="notam-country-group" key={country}>
-                            <div className="notam-country-header">{countryFlag} {countryName}</div>
-                            <div className="notam-map-location-chips">
-                              {airportsInCountry.map(loc => {
-                                const isActive = notamLocationsOnMap.has(loc);
-                                const info = AIRPORT_DATABASE[loc];
-                                const shortName = info?.name?.replace('공항', '').replace('국제', '') || loc;
-                                const count = notamCountsOther[loc] || 0;
-                                return (
-                                  <button
-                                    key={loc}
-                                    className={`notam-map-chip ${isActive ? 'active' : ''} ${info?.type || 'other'}`}
-                                    onClick={() => {
-                                      const newSet = new Set(notamLocationsOnMap);
-                                      isActive ? newSet.delete(loc) : newSet.add(loc);
-                                      setNotamLocationsOnMap(newSet);
-                                    }}
-                                    title={`${loc} ${info?.name || ''} (${count}건) - 지도에 ${isActive ? '숨기기' : '표시'}`}
-                                  >
-                                    {loc} {shortName !== loc ? shortName : ''} ({count})
-                                  </button>
-                                );
-                              })}
-                              <button
-                                className="notam-select-all-btn"
-                                onClick={() => {
-                                  const newSet = new Set(notamLocationsOnMap);
-                                  const allSelected = airportsInCountry.every(loc => newSet.has(loc));
-                                  airportsInCountry.forEach(loc => allSelected ? newSet.delete(loc) : newSet.add(loc));
-                                  setNotamLocationsOnMap(newSet);
-                                }}
-                              >
-                                {airportsInCountry.every(loc => notamLocationsOnMap.has(loc)) ? '전체해제' : '전체선택'}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </>
-                  );
-                })()}
-                {notamLocationsOnMap.size > 0 && (
-                  <button
-                    className="notam-map-clear-btn"
-                    onClick={() => setNotamLocationsOnMap(new Set())}
-                  >
-                    필터 해제 ({notamLocationsOnMap.size}개 선택됨)
-                  </button>
-                )}
-              </div>
-              {/* NOTAM 지도 범례 */}
-              <div className="notam-map-legend">
-                <span className="notam-legend-item notam-legend-active">
-                  <span className="notam-legend-dot" style={{ background: '#FF9800' }}></span>
-                  활성 NOTAM
-                </span>
-                <span className="notam-legend-item notam-legend-future">
-                  <span className="notam-legend-dot" style={{ background: '#2196F3' }}></span>
-                  예정 NOTAM
-                </span>
-                <span className="notam-legend-info">
-                  {notamLocationsOnMap.size === 0 ? '공항 선택 시 지도 표시' : `${notamLocationsOnMap.size}개 공항 표시 중`}
-                </span>
-              </div>
-              <div className="notam-content">
-                {notamLoading && <div className="notam-loading">로딩 중...</div>}
-                {notamError && <div className="notam-error">오류: {notamError}</div>}
-                {notamData && !notamLoading && (
-                  <div className="notam-list">
-                    {(() => {
-                      // Build cancelled set for filtering
-                      const cancelledSet = buildCancelledNotamSet(notamData.data);
-
-                      const filtered = notamData.data?.filter(n => {
-                        // 지도 표시 필터 (공항 선택된 경우에만 해당 공항 표시)
-                        const matchMapFilter = notamLocationsOnMap.size === 0 || notamLocationsOnMap.has(n.location);
-                        // 검색어 필터
-                        const matchSearch = !notamFilter ||
-                          n.notam_number?.toLowerCase().includes(notamFilter.toLowerCase()) ||
-                          n.location?.toLowerCase().includes(notamFilter.toLowerCase()) ||
-                          n.e_text?.toLowerCase().includes(notamFilter.toLowerCase()) ||
-                          n.qcode_mean?.toLowerCase().includes(notamFilter.toLowerCase());
-                        // Filter by validity (time, type, cancellation)
-                        const isValid = isNotamActive(n, cancelledSet);
-                        return matchMapFilter && matchSearch && isValid;
-                      }) || [];
-                      if (filtered.length === 0) {
-                        return <div className="notam-empty">해당 조건의 유효한 NOTAM이 없습니다.</div>;
-                      }
-                      return filtered.map((n, idx) => {
-                        const notamType = getNotamType(n.full_text);
-                        const typeLabel = notamType === 'R' ? 'REPLACE' : notamType === 'C' ? 'CANCEL' : 'NEW';
-                        const cancelledRef = getCancelledNotamRef(n.full_text);
-                        const validity = getNotamValidity(n, cancelledSet);
-                        const validityLabel = validity === 'future' ? '예정' : '활성';
-
-                        return (
-                          <div key={n.id || idx} className={`notam-item notam-type-${notamType} notam-validity-${validity}`}>
-                            <div
-                              className="notam-item-header"
-                              onClick={() => setNotamExpanded(p => ({ ...p, [n.id || idx]: !p[n.id || idx] }))}
-                            >
-                              <span className="notam-location">{n.location}</span>
-                              <span className="notam-number">{n.notam_number}</span>
-                              <span className={`notam-validity-badge notam-validity-${validity}`}>{validityLabel}</span>
-                              <span className={`notam-type-badge notam-type-${notamType}`}>{typeLabel}</span>
-                              <span className={`notam-expand-icon ${notamExpanded[n.id || idx] ? 'expanded' : ''}`}>▼</span>
-                            </div>
-                            {notamExpanded[n.id || idx] && (
-                              <div className="notam-item-detail">
-                                {notamType === 'R' && cancelledRef && (
-                                  <div className="notam-detail-row notam-replaced-ref">
-                                    <span className="notam-label">대체 대상:</span>
-                                    <span>{cancelledRef}</span>
-                                  </div>
-                                )}
-                                <div className="notam-detail-row">
-                                  <span className="notam-label">Q-Code:</span>
-                                  <span>{n.qcode} - {n.qcode_mean}</span>
-                                </div>
-                                <div className="notam-detail-row">
-                                  <span className="notam-label">유효기간:</span>
-                                  <span>{n.effective_start || '-'} ~ {n.effective_end || 'PERM'}</span>
-                                </div>
-                                <div className="notam-detail-row">
-                                  <span className="notam-label">내용:</span>
-                                </div>
-                                <div className="notam-e-text">{n.e_text}</div>
-                                {n.full_text && (
-                                  <>
-                                    <div className="notam-detail-row">
-                                      <span className="notam-label">전문:</span>
-                                    </div>
-                                    <div className="notam-full-text">{n.full_text}</div>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                )}
-              </div>
-              <div className="notam-footer">
-                {notamData && <span className="notam-count">
-                  {notamLocationsOnMap.size > 0
-                    ? `선택 공항 NOTAM ${notamData.data?.filter(n => notamLocationsOnMap.has(n.location)).length || 0}건`
-                    : `전체 ${notamData.returned?.toLocaleString() || notamData.data?.length || 0}건`
-                  }
-                </span>}
-                <span className="notam-update-time">
-                  {notamLocationsOnMap.size > 0 ? [...notamLocationsOnMap].join(', ') : '지도 영역 기준'}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Mobile Menu Toggle Button */}
-      <button
-        className="mobile-menu-toggle"
-        onClick={() => setIsPanelOpen(!isPanelOpen)}
-        aria-label={isPanelOpen ? '메뉴 닫기' : '메뉴 열기'}
-      >
-        {isPanelOpen ? '✕' : '☰'}
-      </button>
+      {/* Mobile Menu Toggle Button - 패널 열릴 때 숨김 */}
+      {!isPanelOpen && (
+        <button
+          className="mobile-menu-toggle"
+          onClick={() => setIsPanelOpen(true)}
+          aria-label="메뉴 열기"
+        >
+          ☰
+        </button>
+      )}
       <div className={`control-panel ${isPanelOpen ? 'open' : 'closed'}`}>
         <div className="panel-header">
-          <span className="panel-title">RKPU 울산공항</span>
+          <span className="panel-title">TBAS</span>
           <button className="panel-close-btn" onClick={() => setIsPanelOpen(false)} aria-label="패널 닫기">✕</button>
         </div>
 
         <div className="panel-content">
           {/* Altitude Legend */}
-          <div className="section">
-            <div className="section-title">고도 범례</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-              <span style={{ fontSize: '11px', color: '#9aa0a6' }}>0ft</span>
-              <div style={{ flex: 1, height: '12px', borderRadius: '6px', background: 'linear-gradient(to right, rgb(0,255,50), rgb(255,255,50), rgb(255,0,50))' }} />
-              <span style={{ fontSize: '11px', color: '#9aa0a6' }}>8000ft</span>
-            </div>
-          </div>
+          <AltitudeLegend />
 
           {/* Basic Layers - Accordion */}
-          <div className="section accordion">
-            <div className="accordion-header" onClick={() => setLayersExpanded(!layersExpanded)}>
-              <span>기본 레이어</span>
-              <span className={`accordion-icon ${layersExpanded ? 'expanded' : ''}`}>▼</span>
-            </div>
-            <div className={`toggle-group accordion-content ${!layersExpanded ? 'collapsed' : ''}`}>
-              <div className={`toggle-item ${showWaypoints && !hasActiveProcedure ? 'active' : ''} ${hasActiveProcedure ? 'disabled' : ''}`} onClick={() => !hasActiveProcedure && setShowWaypoints(!showWaypoints)}>
-                <input type="checkbox" className="toggle-checkbox" checked={showWaypoints && !hasActiveProcedure} readOnly disabled={hasActiveProcedure} />
-                <span className="toggle-label">웨이포인트 {hasActiveProcedure && <span className="hint">(절차별)</span>}</span>
-              </div>
-              <div className={`toggle-item ${showObstacles ? 'active' : ''}`} onClick={() => setShowObstacles(!showObstacles)}><input type="checkbox" className="toggle-checkbox" checked={showObstacles} readOnly /><span className="toggle-label">장애물</span></div>
-              <div className={`toggle-item ${showAirspace ? 'active' : ''}`} onClick={() => setShowAirspace(!showAirspace)}><input type="checkbox" className="toggle-checkbox" checked={showAirspace} readOnly /><span className="toggle-label">공역</span></div>
-              {is3DView && <div className={`toggle-item ${show3DAltitude ? 'active' : ''}`} onClick={() => setShow3DAltitude(!show3DAltitude)}><input type="checkbox" className="toggle-checkbox" checked={show3DAltitude} readOnly /><span className="toggle-label">3D 고도 표시</span></div>}
-              {is3DView && <div className={`toggle-item ${showTerrain ? 'active' : ''}`} onClick={() => setShowTerrain(!showTerrain)}><input type="checkbox" className="toggle-checkbox" checked={showTerrain} readOnly /><span className="toggle-label">지형</span></div>}
-              {is3DView && <div className={`toggle-item ${showBuildings ? 'active' : ''}`} onClick={() => setShowBuildings(!showBuildings)}><input type="checkbox" className="toggle-checkbox" checked={showBuildings} readOnly /><span className="toggle-label">3D 건물</span></div>}
-              <div className={`toggle-item ${showRadar ? 'active' : ''}`} onClick={() => setShowRadar(!showRadar)}><input type="checkbox" className="toggle-checkbox" checked={showRadar} readOnly /><span className="toggle-label">기상 레이더</span></div>
-            </div>
-          </div>
+          <Accordion title="기본 레이어" expanded={layersExpanded} onToggle={() => setLayersExpanded(!layersExpanded)}>
+            <ToggleItem label="웨이포인트" checked={showWaypoints} onChange={setShowWaypoints} disabled={hasActiveProcedure} hint={hasActiveProcedure ? "(절차별)" : null} />
+            <ToggleItem label="장애물" checked={showObstacles} onChange={setShowObstacles} />
+            <ToggleItem label="공역" checked={showAirspace} onChange={setShowAirspace} />
+            {is3DView && <ToggleItem label="3D 고도 표시" checked={show3DAltitude} onChange={setShow3DAltitude} />}
+            {is3DView && <ToggleItem label="지형" checked={showTerrain} onChange={setShowTerrain} />}
+            {is3DView && <ToggleItem label="3D 건물" checked={showBuildings} onChange={setShowBuildings} />}
+            <ToggleItem label="기상 레이더" checked={showRadar} onChange={setShowRadar} />
+          </Accordion>
 
           {/* Korea Routes/Waypoints/Airspaces - Accordion */}
-          {koreaAirspaceData && (
-            <div className="section accordion">
-              <div className="accordion-header" onClick={() => setKoreaRoutesExpanded(!koreaRoutesExpanded)}>
-                <span>국내 항로/공역</span>
-                <span className="badge">{(koreaAirspaceData.routes?.length || 0) + (koreaAirspaceData.airspaces?.length || 0)}개</span>
-                <span className={`accordion-icon ${koreaRoutesExpanded ? 'expanded' : ''}`}>▼</span>
-              </div>
-              <div className={`toggle-group accordion-content ${!koreaRoutesExpanded ? 'collapsed' : ''}`}>
-                <div className={`toggle-item ${showKoreaRoutes ? 'active' : ''}`} onClick={() => setShowKoreaRoutes(!showKoreaRoutes)}>
-                  <input type="checkbox" className="toggle-checkbox" checked={showKoreaRoutes} readOnly />
-                  <span className="toggle-label">항로 (ATS/RNAV)</span>
-                  <span className="toggle-count">{koreaAirspaceData.routes?.length || 0}</span>
-                </div>
-                <div className={`toggle-item ${showKoreaWaypoints ? 'active' : ''}`} onClick={() => setShowKoreaWaypoints(!showKoreaWaypoints)}>
-                  <input type="checkbox" className="toggle-checkbox" checked={showKoreaWaypoints} readOnly />
-                  <span className="toggle-label">웨이포인트</span>
-                  <span className="toggle-count">{koreaAirspaceData.waypoints?.length || 0}</span>
-                </div>
-                <div className={`toggle-item ${showKoreaNavaids ? 'active' : ''}`} onClick={() => setShowKoreaNavaids(!showKoreaNavaids)}>
-                  <input type="checkbox" className="toggle-checkbox" checked={showKoreaNavaids} readOnly />
-                  <span className="toggle-label">NAVAID (VOR/DME)</span>
-                  <span className="toggle-count">{koreaAirspaceData.navaids?.length || 0}</span>
-                </div>
-                <div className={`toggle-item ${showKoreaAirspaces ? 'active' : ''}`} onClick={() => setShowKoreaAirspaces(!showKoreaAirspaces)}>
-                  <input type="checkbox" className="toggle-checkbox" checked={showKoreaAirspaces} readOnly />
-                  <span className="toggle-label">공역 (P/R/D/MOA)</span>
-                  <span className="toggle-count">{koreaAirspaceData.airspaces?.length || 0}</span>
-                </div>
-                <div className="korea-airspace-info">
-                  <small>출처: eAIP Korea (AIRAC {koreaAirspaceData.metadata?.airac})</small>
-                </div>
-              </div>
-            </div>
-          )}
+          <KoreaAirspacePanel
+            koreaAirspaceData={koreaAirspaceData}
+            koreaRoutesExpanded={koreaRoutesExpanded}
+            setKoreaRoutesExpanded={setKoreaRoutesExpanded}
+            showKoreaRoutes={showKoreaRoutes}
+            setShowKoreaRoutes={setShowKoreaRoutes}
+            showKoreaWaypoints={showKoreaWaypoints}
+            setShowKoreaWaypoints={setShowKoreaWaypoints}
+            showKoreaNavaids={showKoreaNavaids}
+            setShowKoreaNavaids={setShowKoreaNavaids}
+            showKoreaAirspaces={showKoreaAirspaces}
+            setShowKoreaAirspaces={setShowKoreaAirspaces}
+          />
 
           {/* Aircraft - Accordion */}
-          <div className="section accordion">
-            <div className="accordion-header" onClick={() => setAircraftExpanded(!aircraftExpanded)}>
-              <span>실시간 항공기</span>
-              <span className={`accordion-icon ${aircraftExpanded ? 'expanded' : ''}`}>▼</span>
-            </div>
-            <div className={`toggle-group accordion-content ${!aircraftExpanded ? 'collapsed' : ''}`}>
-              <div className={`toggle-item ${showAircraft ? 'active' : ''}`} onClick={() => setShowAircraft(!showAircraft)}><input type="checkbox" className="toggle-checkbox" checked={showAircraft} readOnly /><span className="toggle-label">항공기 표시</span></div>
-              <div className={`toggle-item ${showAircraftTrails ? 'active' : ''}`} onClick={() => setShowAircraftTrails(!showAircraftTrails)}><input type="checkbox" className="toggle-checkbox" checked={showAircraftTrails} readOnly /><span className="toggle-label">항적 표시</span></div>
-              {showAircraftTrails && (
-                <>
-                  <div className="trail-duration-select">
-                    <span className="trail-duration-label">히스토리 길이:</span>
-                    <select
-                      value={trailDuration}
-                      onChange={(e) => setTrailDuration(Number(e.target.value))}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {TRAIL_DURATION_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="trail-duration-select">
-                    <span className="trail-duration-label">헤딩 예측:</span>
-                    <select
-                      value={headingPrediction}
-                      onChange={(e) => setHeadingPrediction(Number(e.target.value))}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <option value={0}>없음</option>
-                      <option value={30}>30초</option>
-                      <option value={60}>1분</option>
-                      <option value={120}>2분</option>
-                      <option value={180}>3분</option>
-                      <option value={300}>5분</option>
-                    </select>
-                  </div>
-                  <div className="trail-duration-select" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                    <span className="trail-duration-label" style={{ marginBottom: '4px' }}>라벨 위치 (드래그):</span>
-                    <div
-                      className="label-position-pad"
-                      style={{
-                        width: '60px', height: '60px', background: 'rgba(0,0,0,0.5)',
-                        border: '1px solid rgba(0,255,136,0.5)', borderRadius: '4px',
-                        position: 'relative', cursor: 'crosshair'
-                      }}
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        setIsDraggingLabel(true);
-                      }}
-                      onMouseMove={(e) => {
-                        if (!isDraggingLabel) return;
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const x = ((e.clientX - rect.left) / rect.width - 0.5) * 4; // -2 ~ 2 범위
-                        const y = ((e.clientY - rect.top) / rect.height - 0.5) * 4;
-                        setLabelOffset({ x: Math.max(-2, Math.min(2, x)), y: Math.max(-2, Math.min(2, y)) });
-                      }}
-                      onMouseUp={() => setIsDraggingLabel(false)}
-                      onMouseLeave={() => setIsDraggingLabel(false)}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {/* 중심 + 표시 */}
-                      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'rgba(0,255,136,0.3)', fontSize: '20px' }}>✈</div>
-                      {/* 현재 라벨 위치 표시 */}
-                      <div style={{
-                        position: 'absolute',
-                        left: `${50 + labelOffset.x * 12.5}%`,
-                        top: `${50 + labelOffset.y * 12.5}%`,
-                        transform: 'translate(-50%, -50%)',
-                        width: '8px', height: '8px',
-                        background: '#00ff88', borderRadius: '50%',
-                        boxShadow: '0 0 4px #00ff88'
-                      }}></div>
-                    </div>
-                    <span style={{ fontSize: '9px', color: '#888', marginTop: '2px' }}>
-                      X:{labelOffset.x.toFixed(1)} Y:{labelOffset.y.toFixed(1)}
-                    </span>
-                  </div>
-                </>
-              )}
-              {is3DView && <div className={`toggle-item ${show3DAircraft ? 'active' : ''}`} onClick={() => setShow3DAircraft(!show3DAircraft)}><input type="checkbox" className="toggle-checkbox" checked={show3DAircraft} readOnly /><span className="toggle-label">3D 항공기 (GLB)</span></div>}
-            </div>
-          </div>
+          <AircraftControlPanel
+            aircraftExpanded={aircraftExpanded}
+            setAircraftExpanded={setAircraftExpanded}
+            showAircraft={showAircraft}
+            setShowAircraft={setShowAircraft}
+            showAircraftTrails={showAircraftTrails}
+            setShowAircraftTrails={setShowAircraftTrails}
+            show3DAircraft={show3DAircraft}
+            setShow3DAircraft={setShow3DAircraft}
+            is3DView={is3DView}
+            trailDuration={trailDuration}
+            setTrailDuration={setTrailDuration}
+            headingPrediction={headingPrediction}
+            setHeadingPrediction={setHeadingPrediction}
+            labelOffset={labelOffset}
+            setLabelOffset={setLabelOffset}
+            isDraggingLabel={isDraggingLabel}
+            setIsDraggingLabel={setIsDraggingLabel}
+          />
 
-          {/* SID - Accordion with Runway Groups */}
-          {data?.procedures?.SID && Object.keys(data.procedures.SID).length > 0 && (
-            <div className="section accordion">
-              <div className="accordion-header" onClick={() => setSidExpanded(!sidExpanded)}>
-                <span>SID 출발절차</span>
-                <span className={`accordion-icon ${sidExpanded ? 'expanded' : ''}`}>▼</span>
-              </div>
-              <div className={`toggle-group accordion-content ${!sidExpanded ? 'collapsed' : ''}`}>
-                <div className="runway-group">
-                  <div className="runway-label">RWY 18 (2-6, 2-7)</div>
-                  {Object.entries(data.procedures.SID).filter(([k]) => k.startsWith('2-6') || k.startsWith('2-7')).map(([k, p]) => (
-                    <div key={k} className={`toggle-item ${sidVisible[k] ? 'active' : ''}`} onClick={() => setSidVisible(prev => ({ ...prev, [k]: !prev[k] }))}>
-                      <input type="checkbox" className="toggle-checkbox" checked={sidVisible[k] || false} readOnly />
-                      <span className="toggle-label">{p.display_name}</span>
-                      <span className="toggle-color" style={{ background: procColors.SID[k] }}></span>
-                    </div>
-                  ))}
-                </div>
-                <div className="runway-group">
-                  <div className="runway-label">RWY 36 (2-8, 2-9)</div>
-                  {Object.entries(data.procedures.SID).filter(([k]) => k.startsWith('2-8') || k.startsWith('2-9')).map(([k, p]) => (
-                    <div key={k} className={`toggle-item ${sidVisible[k] ? 'active' : ''}`} onClick={() => setSidVisible(prev => ({ ...prev, [k]: !prev[k] }))}>
-                      <input type="checkbox" className="toggle-checkbox" checked={sidVisible[k] || false} readOnly />
-                      <span className="toggle-label">{p.display_name}</span>
-                      <span className="toggle-color" style={{ background: procColors.SID[k] }}></span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* SID 출발절차 */}
+          <SidPanel
+            procedures={data?.procedures?.SID}
+            expanded={sidExpanded}
+            onToggle={() => setSidExpanded(!sidExpanded)}
+            visible={sidVisible}
+            setVisible={setSidVisible}
+            colors={procColors.SID}
+          />
 
-          {/* STAR - Accordion with Runway Groups */}
-          {data?.procedures?.STAR && Object.keys(data.procedures.STAR).length > 0 && (
-            <div className="section accordion">
-              <div className="accordion-header" onClick={() => setStarExpanded(!starExpanded)}>
-                <span>STAR 도착절차</span>
-                <span className={`accordion-icon ${starExpanded ? 'expanded' : ''}`}>▼</span>
-              </div>
-              <div className={`toggle-group accordion-content ${!starExpanded ? 'collapsed' : ''}`}>
-                <div className="runway-group">
-                  <div className="runway-label">RWY 18 (2-10)</div>
-                  {Object.entries(data.procedures.STAR).filter(([k]) => k.startsWith('2-10')).map(([k, p]) => (
-                    <div key={k} className={`toggle-item ${starVisible[k] ? 'active' : ''}`} onClick={() => setStarVisible(prev => ({ ...prev, [k]: !prev[k] }))}>
-                      <input type="checkbox" className="toggle-checkbox" checked={starVisible[k] || false} readOnly />
-                      <span className="toggle-label">{p.display_name}</span>
-                      <span className="toggle-color" style={{ background: procColors.STAR[k] }}></span>
-                    </div>
-                  ))}
-                </div>
-                <div className="runway-group">
-                  <div className="runway-label">RWY 36 (2-11)</div>
-                  {Object.entries(data.procedures.STAR).filter(([k]) => k.startsWith('2-11')).map(([k, p]) => (
-                    <div key={k} className={`toggle-item ${starVisible[k] ? 'active' : ''}`} onClick={() => setStarVisible(prev => ({ ...prev, [k]: !prev[k] }))}>
-                      <input type="checkbox" className="toggle-checkbox" checked={starVisible[k] || false} readOnly />
-                      <span className="toggle-label">{p.display_name}</span>
-                      <span className="toggle-color" style={{ background: procColors.STAR[k] }}></span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* STAR 도착절차 */}
+          <StarPanel
+            procedures={data?.procedures?.STAR}
+            expanded={starExpanded}
+            onToggle={() => setStarExpanded(!starExpanded)}
+            visible={starVisible}
+            setVisible={setStarVisible}
+            colors={procColors.STAR}
+          />
 
-          {/* APPROACH - Accordion with Runway Groups */}
-          {data?.procedures?.APPROACH && Object.keys(data.procedures.APPROACH).length > 0 && (
-            <div className="section accordion">
-              <div className="accordion-header" onClick={() => setApchExpanded(!apchExpanded)}>
-                <span>APCH 접근절차</span>
-                <span className={`accordion-icon ${apchExpanded ? 'expanded' : ''}`}>▼</span>
-              </div>
-              <div className={`toggle-group accordion-content ${!apchExpanded ? 'collapsed' : ''}`}>
-                <div className="runway-group">
-                  <div className="runway-label">RWY 18</div>
-                  {Object.entries(data.procedures.APPROACH).filter(([k]) => k.includes('RWY 18')).map(([k, p]) => (
-                    <div key={k} className={`toggle-item ${apchVisible[k] ? 'active' : ''}`} onClick={() => setApchVisible(prev => ({ ...prev, [k]: !prev[k] }))}>
-                      <input type="checkbox" className="toggle-checkbox" checked={apchVisible[k] || false} readOnly />
-                      <span className="toggle-label">{p.display_name}</span>
-                      <span className="toggle-color" style={{ background: procColors.APPROACH[k] }}></span>
-                    </div>
-                  ))}
-                </div>
-                <div className="runway-group">
-                  <div className="runway-label">RWY 36</div>
-                  {Object.entries(data.procedures.APPROACH).filter(([k]) => k.includes('RWY 36')).map(([k, p]) => (
-                    <div key={k} className={`toggle-item ${apchVisible[k] ? 'active' : ''}`} onClick={() => setApchVisible(prev => ({ ...prev, [k]: !prev[k] }))}>
-                      <input type="checkbox" className="toggle-checkbox" checked={apchVisible[k] || false} readOnly />
-                      <span className="toggle-label">{p.display_name}</span>
-                      <span className="toggle-color" style={{ background: procColors.APPROACH[k] }}></span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* APCH 접근절차 */}
+          <ApproachPanel
+            procedures={data?.procedures?.APPROACH}
+            expanded={apchExpanded}
+            onToggle={() => setApchExpanded(!apchExpanded)}
+            visible={apchVisible}
+            setVisible={setApchVisible}
+            colors={procColors.APPROACH}
+          />
 
-          {/* Chart Overlays - Accordion */}
-          <div className="section accordion">
-            <div className="accordion-header" onClick={() => setChartExpanded(!chartExpanded)}>
-              <span>차트 오버레이</span>
-              <span className={`accordion-icon ${chartExpanded ? 'expanded' : ''}`}>▼</span>
-            </div>
-            <div className={`toggle-group accordion-content ${!chartExpanded ? 'collapsed' : ''}`}>
-              <div className="runway-group">
-                <div className="runway-label">RWY 18</div>
-                {chartsByRunway['18'].map(([chartId, chart]) => (
-                  <div key={chartId} className="chart-control-item">
-                    <div className={`toggle-item ${activeCharts[chartId] ? 'active' : ''}`} onClick={() => toggleChart(chartId)}>
-                      <input type="checkbox" className="toggle-checkbox" checked={activeCharts[chartId] || false} readOnly />
-                      <span className="toggle-label">{chart.name}</span>
-                    </div>
-                    {activeCharts[chartId] && (
-                      <div className="opacity-control">
-                        <input type="range" min="0" max="1" step="0.1" value={chartOpacities[chartId] || 0.7} onChange={(e) => updateChartOpacity(chartId, parseFloat(e.target.value))} onClick={(e) => e.stopPropagation()} />
-                        <span className="opacity-value">{Math.round((chartOpacities[chartId] || 0.7) * 100)}%</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="runway-group">
-                <div className="runway-label">RWY 36</div>
-                {chartsByRunway['36'].map(([chartId, chart]) => (
-                  <div key={chartId} className="chart-control-item">
-                    <div className={`toggle-item ${activeCharts[chartId] ? 'active' : ''}`} onClick={() => toggleChart(chartId)}>
-                      <input type="checkbox" className="toggle-checkbox" checked={activeCharts[chartId] || false} readOnly />
-                      <span className="toggle-label">{chart.name}</span>
-                    </div>
-                    {activeCharts[chartId] && (
-                      <div className="opacity-control">
-                        <input type="range" min="0" max="1" step="0.1" value={chartOpacities[chartId] || 0.7} onChange={(e) => updateChartOpacity(chartId, parseFloat(e.target.value))} onClick={(e) => e.stopPropagation()} />
-                        <span className="opacity-value">{Math.round((chartOpacities[chartId] || 0.7) * 100)}%</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          {/* 차트 오버레이 */}
+          <ChartOverlayPanel
+            chartsByRunway={chartsByRunway}
+            expanded={chartExpanded}
+            onToggle={() => setChartExpanded(!chartExpanded)}
+            activeCharts={activeCharts}
+            toggleChart={toggleChart}
+            chartOpacities={chartOpacities}
+            updateChartOpacity={updateChartOpacity}
+          />
 
           <div className="section">
             <button className="fly-btn" onClick={flyToAirport}>공항으로 이동</button>
@@ -4930,727 +2553,45 @@ function App() {
       </div>
 
       {/* Aircraft Detail Panel (FR24 Style) */}
-      {(() => {
-        // Get real-time aircraft data from aircraft array
-        const displayAircraft = selectedAircraft ? aircraft.find(a => a.hex === selectedAircraft.hex) || selectedAircraft : null;
-        return (
-      <div className={`aircraft-panel ${showAircraftPanel && displayAircraft ? 'open' : ''}`}>
-        {showAircraftPanel && displayAircraft && (
-          <div className="aircraft-panel-content">
-            {/* Header with callsign */}
-            <div className="aircraft-panel-header">
-              <div className="aircraft-header-main">
-                <span className="aircraft-callsign">{displayAircraft.callsign || displayAircraft.hex}</span>
-                <span className="aircraft-reg">{displayAircraft.registration || 'N/A'}</span>
-              </div>
-              <button className="aircraft-close-btn" onClick={() => { setShowAircraftPanel(false); setSelectedAircraft(null); }}>×</button>
-            </div>
-
-            {/* Aircraft Photo - airport-data.com 또는 기종별 기본 이미지 */}
-            <div className="aircraft-photo-section">
-              {aircraftPhotoLoading && (
-                <div className="aircraft-photo-loading">
-                  <div className="loading-spinner"></div>
-                </div>
-              )}
-              {!aircraftPhotoLoading && (aircraftPhoto?.image || flightSchedule?.aircraft_images?.[0]?.src) && (
-                <img
-                  src={aircraftPhoto?.image || flightSchedule?.aircraft_images?.[0]?.src}
-                  alt={displayAircraft.registration || displayAircraft.callsign}
-                  className="aircraft-photo"
-                  onError={(e) => {
-                    // 사진 로드 실패 시 기종별 이미지로 대체
-                    e.target.src = getAircraftImage(displayAircraft.icao_type || displayAircraft.type);
-                    e.target.onerror = null;
-                  }}
-                />
-              )}
-              {!aircraftPhotoLoading && !aircraftPhoto?.image && !flightSchedule?.aircraft_images?.[0]?.src && (
-                <img
-                  src={getAircraftImage(displayAircraft.icao_type || displayAircraft.type)}
-                  alt={displayAircraft.type || 'Aircraft'}
-                  className="aircraft-photo aircraft-photo-default"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              )}
-              {(aircraftPhoto?.photographer || (flightSchedule?.aircraft_images?.[0]?.src && flightSchedule?._source === 'flightradar24')) && (
-                <div className="aircraft-photo-credit">
-                  📷 {aircraftPhoto?.photographer || 'FlightRadar24'}
-                </div>
-              )}
-              {!aircraftPhoto?.image && !flightSchedule?.aircraft_images?.[0]?.src && (displayAircraft.icao_type || displayAircraft.type) && (
-                <div className="aircraft-photo-credit type-info">
-                  {displayAircraft.icao_type || displayAircraft.type}
-                </div>
-              )}
-            </div>
-
-            {/* Route Info - aviationstack 또는 기본 데이터 */}
-            <div className="aircraft-route-section">
-              <div className="route-display">
-                <div className="route-airport origin">
-                  <span className="route-code">
-                    {flightSchedule?.departure?.iata || displayAircraft.origin || '???'}
-                  </span>
-                  <span className="route-name">
-                    {flightSchedule?.departure?.airport || AIRPORT_DATABASE[displayAircraft.origin]?.name || ''}
-                  </span>
-                  {(flightSchedule?.schedule?.std || flightSchedule?.schedule?.etd || flightSchedule?.departure?.scheduled) && (
-                    <span className="route-time">
-                      {flightSchedule?.schedule?.std || flightSchedule?.schedule?.etd ||
-                       (flightSchedule?.departure?.scheduled ? new Date(flightSchedule.departure.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : '')}
-                    </span>
-                  )}
-                </div>
-                <div className="route-arrow">
-                  <div className="route-line"></div>
-                  <span className="route-icon">✈</span>
-                  <div className="route-line"></div>
-                </div>
-                <div className="route-airport destination">
-                  <span className="route-code">
-                    {flightSchedule?.arrival?.iata || displayAircraft.destination || '???'}
-                  </span>
-                  <span className="route-name">
-                    {flightSchedule?.arrival?.airport || AIRPORT_DATABASE[displayAircraft.destination]?.name || ''}
-                  </span>
-                  {(flightSchedule?.schedule?.sta || flightSchedule?.schedule?.eta || flightSchedule?.arrival?.scheduled) && (
-                    <span className="route-time">
-                      {flightSchedule?.schedule?.sta || flightSchedule?.schedule?.eta ||
-                       (flightSchedule?.arrival?.scheduled ? new Date(flightSchedule.arrival.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : '')}
-                    </span>
-                  )}
-                </div>
-              </div>
-              {flightScheduleLoading && (
-                <div className="route-loading">스케줄 조회중...</div>
-              )}
-            </div>
-
-            {/* Takeoff/Landing Time Display */}
-            {(flightSchedule?.schedule?.atd || flightSchedule?.schedule?.std || flightSchedule?.departure?.actual) && (
-              <div className="takeoff-landing-section">
-                <div className="takeoff-landing-grid">
-                  <div className={`tl-item takeoff ${flightSchedule?.schedule?.atd || flightSchedule?.departure?.actual ? '' : 'estimated'}`}>
-                    <span className="tl-label">이륙</span>
-                    <span className="tl-time">
-                      {flightSchedule?.schedule?.atd ||
-                       (flightSchedule?.departure?.actual ? new Date(flightSchedule.departure.actual).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null) ||
-                       flightSchedule?.schedule?.etd ||
-                       flightSchedule?.schedule?.std ||
-                       (flightSchedule?.departure?.scheduled ? new Date(flightSchedule.departure.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : '--:--')}
-                    </span>
-                  </div>
-                  <div className={`tl-item landing ${flightSchedule?.arrival?.actual ? '' : 'estimated'}`}>
-                    <span className="tl-label">착륙</span>
-                    <span className="tl-time">
-                      {(flightSchedule?.arrival?.actual ? new Date(flightSchedule.arrival.actual).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null) ||
-                       flightSchedule?.schedule?.eta ||
-                       flightSchedule?.schedule?.sta ||
-                       (flightSchedule?.arrival?.scheduled ? new Date(flightSchedule.arrival.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : '--:--')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Flight Data Grid - 핵심 데이터만 */}
-            <div className="aircraft-data-section">
-              <div className="data-row">
-                <div className="data-item">
-                  <span className="data-label">고도</span>
-                  <span className="data-value">{(displayAircraft.altitude_ft || 0).toLocaleString()} ft</span>
-                </div>
-                <div className="data-item">
-                  <span className="data-label">속도</span>
-                  <span className="data-value">{displayAircraft.ground_speed || 0} kt</span>
-                </div>
-                <div className="data-item">
-                  <span className="data-label">방향</span>
-                  <span className="data-value">{Math.round(displayAircraft.track || 0)}°</span>
-                </div>
-              </div>
-              <div className="data-row">
-                <div className="data-item">
-                  <span className="data-label">수직속도</span>
-                  <span className={`data-value ${displayAircraft.vertical_rate > 100 ? 'climbing' : displayAircraft.vertical_rate < -100 ? 'descending' : ''}`}>
-                    {displayAircraft.vertical_rate > 0 ? '+' : ''}{displayAircraft.vertical_rate || 0} fpm
-                  </span>
-                </div>
-                <div className="data-item">
-                  <span className="data-label">Squawk</span>
-                  <span className={`data-value squawk ${['7700', '7600', '7500'].includes(displayAircraft.squawk) ? 'emergency' : ''}`}>
-                    {displayAircraft.squawk || '----'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Flight Status Section - 비행 단계, 공역, 항로 정보 */}
-            <div className="flight-status-section collapsible-section">
-              <div className="collapsible-header" onClick={() => toggleSection('flightStatus')}>
-                <div className="section-title">
-                  비행 상태
-                </div>
-                <span className={`collapsible-icon ${sectionExpanded.flightStatus ? 'expanded' : ''}`}>▼</span>
-              </div>
-              <div className={`collapsible-content ${!sectionExpanded.flightStatus ? 'collapsed' : ''}`}>
-                {(() => {
-                  const flightPhase = detectFlightPhase(displayAircraft, data?.airport);
-                  const currentAirspaces = detectCurrentAirspace(displayAircraft, atcData);
-                  const nearestWaypoints = findNearestWaypoints(displayAircraft, data?.waypoints, 3);
-                  const currentProcedure = detectCurrentProcedure(displayAircraft, data?.procedures, flightPhase.phase);
-
-                  return (
-                    <>
-                      {/* 비행 단계 */}
-                      <div className="status-item flight-phase">
-                        <span className="status-label">비행 단계</span>
-                        <span className="status-value" style={{ color: flightPhase.color }}>
-                          {flightPhase.icon} {flightPhase.phase_kr}
-                        </span>
-                      </div>
-
-                      {/* 현재 공역 */}
-                      {currentAirspaces.length > 0 && (
-                        <div className="status-item airspace-info">
-                          <span className="status-label">현재 공역</span>
-                          <div className="status-value-list">
-                            {currentAirspaces.slice(0, 3).map((as, idx) => (
-                              <div key={idx} className="airspace-chip" style={{ borderColor: as.color || '#64b5f6' }}>
-                                <span className="airspace-type">{as.type}</span>
-                                <span className="airspace-name">{as.name}</span>
-                                {as.frequencies && as.frequencies[0] && (
-                                  <span className="airspace-freq">{as.frequencies[0]}</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 현재 절차 (SID/STAR/APCH) */}
-                      {currentProcedure && (
-                        <div className="status-item procedure-info">
-                          <span className="status-label">현재 절차</span>
-                          <span className="status-value procedure">
-                            <span className="procedure-type">{currentProcedure.type}</span>
-                            {currentProcedure.name}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* 다음 Waypoint */}
-                      {nearestWaypoints.length > 0 && (
-                        <div className="status-item waypoint-info">
-                          <span className="status-label">다음 경유지</span>
-                          <div className="waypoint-list">
-                            {nearestWaypoints.map((wp, idx) => (
-                              <div key={idx} className="waypoint-item">
-                                <span className="waypoint-ident">{wp.ident}</span>
-                                <span className="waypoint-dist">{wp.distance_nm.toFixed(1)} NM</span>
-                                {wp.etaMinutes && (
-                                  <span className="waypoint-eta">
-                                    {wp.etaMinutes < 1 ? '<1분' : `${Math.round(wp.etaMinutes)}분`}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-
-            {/* Aircraft Info - Combined with hexdb.io data */}
-            <div className="aircraft-info-section collapsible-section">
-              <div className="collapsible-header" onClick={() => toggleSection('aircraftInfo')}>
-                <div className="section-title">
-                  기체 정보
-                  {aircraftDetailsLoading && <span className="loading-dot">...</span>}
-                </div>
-                <span className={`collapsible-icon ${sectionExpanded.aircraftInfo ? 'expanded' : ''}`}>▼</span>
-              </div>
-              <div className={`collapsible-content ${!sectionExpanded.aircraftInfo ? 'collapsed' : ''}`}>
-              <div className="info-grid">
-                <div className="info-item">
-                  <span className="info-label">기종</span>
-                  <span className="info-value">{aircraftDetails?.Type || displayAircraft.icao_type || displayAircraft.type || '-'}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">등록번호</span>
-                  <span className="info-value">{aircraftDetails?.Registration || displayAircraft.registration || '-'}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Mode-S Hex</span>
-                  <span className="info-value hex">{displayAircraft.hex?.toUpperCase() || '-'}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">운항사</span>
-                  <span className="info-value">{aircraftDetails?.RegisteredOwners || '-'}</span>
-                </div>
-                {aircraftDetails?.ICAOTypeCode && (
-                  <div className="info-item">
-                    <span className="info-label">ICAO 기종코드</span>
-                    <span className="info-value">{aircraftDetails.ICAOTypeCode}</span>
-                  </div>
-                )}
-                {aircraftDetails?.OperatorFlagCode && (
-                  <div className="info-item">
-                    <span className="info-label">운항사 코드</span>
-                    <span className="info-value">{aircraftDetails.OperatorFlagCode}</span>
-                  </div>
-                )}
-                {aircraftDetails?.Manufacturer && (
-                  <div className="info-item full-width">
-                    <span className="info-label">제조사</span>
-                    <span className="info-value">{aircraftDetails.Manufacturer}</span>
-                  </div>
-                )}
-              </div>
-              </div>
-            </div>
-
-            {/* Flight Schedule from UBIKAIS/FR24 */}
-            {(flightSchedule || flightScheduleLoading) && (
-              <div className="aircraft-schedule-section collapsible-section">
-                <div className="collapsible-header" onClick={() => toggleSection('schedule')}>
-                  <div className="section-title">
-                    스케줄 정보
-                    {flightScheduleLoading && <span className="loading-dot">...</span>}
-                    {flightSchedule?._source === 'ubikais' && <span className="data-source ubikais"> (UBIKAIS)</span>}
-                    {flightSchedule?._source === 'flightradar24' && <span className="data-source fr24"> (FR24)</span>}
-                  </div>
-                  <span className={`collapsible-icon ${sectionExpanded.schedule ? 'expanded' : ''}`}>▼</span>
-                </div>
-                <div className={`collapsible-content ${!sectionExpanded.schedule ? 'collapsed' : ''}`}>
-                {flightSchedule && (
-                  <div className="schedule-grid">
-                    <div className="schedule-item">
-                      <span className="schedule-label">항공편</span>
-                      <span className="schedule-value">{flightSchedule.flight?.iata || flightSchedule.flight?.icao || '-'}</span>
-                    </div>
-                    <div className="schedule-item">
-                      <span className="schedule-label">상태</span>
-                      <span className={`schedule-value status-${flightSchedule.flight_status}`}>
-                        {flightSchedule.flight_status === 'DEP' ? '출발' :
-                         flightSchedule.flight_status === 'ARR' ? '도착' :
-                         flightSchedule.flight_status === 'DLA' ? '지연' :
-                         flightSchedule.flight_status === 'CNL' ? '취소' :
-                         flightSchedule.flight_status === 'active' ? '운항중' :
-                         flightSchedule.flight_status === 'scheduled' ? '예정' :
-                         flightSchedule.flight_status === 'landed' ? '착륙' :
-                         flightSchedule.flight_status === 'cancelled' ? '취소' :
-                         flightSchedule.flight_status || '-'}
-                      </span>
-                    </div>
-                    {/* UBIKAIS 운항 유형 표시 */}
-                    {flightSchedule.schedule?.nature && (
-                      <div className="schedule-item">
-                        <span className="schedule-label">유형</span>
-                        <span className={`schedule-value nature-${flightSchedule.schedule.nature}`}>
-                          {flightSchedule.schedule.nature === 'PAX' ? '✈️ 여객' :
-                           flightSchedule.schedule.nature === 'CGO' ? '📦 화물' :
-                           flightSchedule.schedule.nature === 'STP' ? '🛑 기술착륙' :
-                           flightSchedule.schedule.nature === 'GEN' ? '🛩️ 일반' :
-                           flightSchedule.schedule.nature}
-                        </span>
-                      </div>
-                    )}
-                    {/* UBIKAIS 기종 정보 */}
-                    {flightSchedule.aircraft_info?.type && (
-                      <div className="schedule-item">
-                        <span className="schedule-label">기종</span>
-                        <span className="schedule-value">{flightSchedule.aircraft_info.type}</span>
-                      </div>
-                    )}
-                    <div className="schedule-item">
-                      <span className="schedule-label">출발</span>
-                      <span className="schedule-value">
-                        {flightSchedule.departure?.iata || flightSchedule.departure?.icao || '-'}
-                        {flightSchedule.departure?.scheduled && (
-                          <span className="schedule-time">
-                            {new Date(flightSchedule.departure.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="schedule-item">
-                      <span className="schedule-label">도착</span>
-                      <span className="schedule-value">
-                        {flightSchedule.arrival?.iata || flightSchedule.arrival?.icao || '-'}
-                        {flightSchedule.arrival?.scheduled && (
-                          <span className="schedule-time">
-                            {new Date(flightSchedule.arrival.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    {/* UBIKAIS 시간 정보 */}
-                    {flightSchedule.schedule && (
-                      <>
-                        <div className="schedule-item">
-                          <span className="schedule-label">계획 출발</span>
-                          <span className="schedule-value">{flightSchedule.schedule.std || '-'}</span>
-                        </div>
-                        <div className="schedule-item">
-                          <span className="schedule-label">예상 출발</span>
-                          <span className="schedule-value">{flightSchedule.schedule.etd || '-'}</span>
-                        </div>
-                        {flightSchedule.schedule.atd && (
-                          <div className="schedule-item">
-                            <span className="schedule-label">실제 출발</span>
-                            <span className="schedule-value highlight">{flightSchedule.schedule.atd}</span>
-                          </div>
-                        )}
-                        <div className="schedule-item">
-                          <span className="schedule-label">계획 도착</span>
-                          <span className="schedule-value">{flightSchedule.schedule.sta || '-'}</span>
-                        </div>
-                        <div className="schedule-item">
-                          <span className="schedule-label">예상 도착</span>
-                          <span className="schedule-value">{flightSchedule.schedule.eta || '-'}</span>
-                        </div>
-                      </>
-                    )}
-                    {flightSchedule.departure?.delay && (
-                      <div className="schedule-item full-width">
-                        <span className="schedule-label">지연</span>
-                        <span className="schedule-value delay">{flightSchedule.departure.delay}분</span>
-                      </div>
-                    )}
-                    {flightSchedule.departure?.gate && (
-                      <div className="schedule-item">
-                        <span className="schedule-label">출발 게이트</span>
-                        <span className="schedule-value">{flightSchedule.departure.gate}</span>
-                      </div>
-                    )}
-                    {flightSchedule.arrival?.gate && (
-                      <div className="schedule-item">
-                        <span className="schedule-label">도착 게이트</span>
-                        <span className="schedule-value">{flightSchedule.arrival.gate}</span>
-                      </div>
-                    )}
-                    {/* UBIKAIS 데이터 시간 표시 */}
-                    {flightSchedule._lastUpdated && (
-                      <div className="schedule-item full-width">
-                        <span className="schedule-label">데이터 시각</span>
-                        <span className="schedule-value small">{flightSchedule._lastUpdated}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-                </div>
-            )}
-
-            {/* Flight Track Graph - OpenSky history or local trail */}
-            {(flightTrack?.path?.length > 3 || (aircraftTrails[displayAircraft.hex]?.length > 3)) && (
-              <div className="aircraft-graph-section">
-                <div className="section-title">
-                  비행 고도 그래프
-                  {flightTrackLoading && <span className="loading-dot">...</span>}
-                  {flightTrack && <span className="graph-source"> (OpenSky)</span>}
-                </div>
-                <div className="graph-container" style={{ position: "relative" }}>
-                  <svg
-                    viewBox="0 0 320 120"
-                    className="flight-graph"
-                    style={{ cursor: 'crosshair' }}
-                    onMouseMove={(e) => {
-                      const svg = e.currentTarget;
-                      const rect = svg.getBoundingClientRect();
-                      const x = ((e.clientX - rect.left) / rect.width) * 320;
-                      const trackData = flightTrack?.path || aircraftTrails[displayAircraft.hex] || [];
-                      const validAltData = trackData.filter(t => typeof t.altitude_ft === 'number' && !isNaN(t.altitude_ft) && t.altitude_ft >= 0);
-                      if (validAltData.length < 2 || x < 30 || x > 310) { setGraphHoverData(null); return; }
-                      const xScale = 280 / Math.max(validAltData.length - 1, 1);
-                      const idx = Math.round((x - 30) / xScale);
-                      const dp = validAltData[Math.max(0, Math.min(idx, validAltData.length - 1))];
-                      if (dp) {
-                        setGraphHoverData({
-                          time: dp.time ? new Date(dp.time * 1000).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : dp.timestamp ? new Date(dp.timestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null,
-                          altitude: dp.altitude_ft, x: (x / 320) * 100
-                        });
-                      }
-                    }}
-                    onTouchMove={(e) => {
-                      e.preventDefault();
-                      const touch = e.touches[0];
-                      const svg = e.currentTarget;
-                      const rect = svg.getBoundingClientRect();
-                      const x = ((touch.clientX - rect.left) / rect.width) * 320;
-                      const trackData = flightTrack?.path || aircraftTrails[displayAircraft.hex] || [];
-                      const validAltData = trackData.filter(t => typeof t.altitude_ft === 'number' && !isNaN(t.altitude_ft) && t.altitude_ft >= 0);
-                      if (validAltData.length < 2 || x < 30 || x > 310) { setGraphHoverData(null); return; }
-                      const xScale = 280 / Math.max(validAltData.length - 1, 1);
-                      const idx = Math.round((x - 30) / xScale);
-                      const dp = validAltData[Math.max(0, Math.min(idx, validAltData.length - 1))];
-                      if (dp) {
-                        setGraphHoverData({
-                          time: dp.time ? new Date(dp.time * 1000).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : dp.timestamp ? new Date(dp.timestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null,
-                          altitude: dp.altitude_ft, x: (x / 320) * 100
-                        });
-                      }
-                    }}
-                    onTouchEnd={() => setGraphHoverData(null)}
-                    onMouseLeave={() => setGraphHoverData(null)}
-                  >
-                    <defs>
-                      <linearGradient id="altGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="rgba(100,181,246,0.3)" />
-                        <stop offset="100%" stopColor="rgba(100,181,246,0)" />
-                      </linearGradient>
-                    </defs>
-                    {[0, 25, 50, 75, 100].map(y => (
-                      <line key={y} x1="30" y1={10 + y} x2="310" y2={10 + y} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                    ))}
-                    {(() => {
-                      // OpenSky track 우선, 없으면 로컬 trail 사용
-                      const trackData = flightTrack?.path || aircraftTrails[displayAircraft.hex] || [];
-                      if (trackData.length < 2) return null;
-
-                      // altitude_ft 값이 있는 데이터만 필터링
-                      const validAltData = trackData.filter(t => typeof t.altitude_ft === 'number' && !isNaN(t.altitude_ft) && t.altitude_ft >= 0);
-                      if (validAltData.length < 2) return null;
-
-                      const altitudes = validAltData.map(t => t.altitude_ft);
-                      const maxAlt = Math.max(...altitudes, 1000);
-                      const minAlt = Math.min(...altitudes.filter(a => a > 0), 0);
-                      const xScale = 280 / Math.max(validAltData.length - 1, 1);
-                      const altRange = Math.max(maxAlt - minAlt, 1000);
-
-                      // Altitude path - NaN 체크 추가
-                      const altPath = validAltData.map((t, i) => {
-                        const x = 30 + i * xScale;
-                        const y = 105 - ((t.altitude_ft - minAlt) / altRange) * 90;
-                        // NaN 체크
-                        if (isNaN(x) || isNaN(y)) return '';
-                        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-                      }).filter(p => p).join(' ');
-
-                      if (!altPath || altPath.length < 5) return null;
-                      const altArea = altPath + ` L310,105 L30,105 Z`;
-
-                      return (
-                        <>
-                          <path d={altArea} fill="url(#altGradient)" />
-                          <path d={altPath} fill="none" stroke="#64b5f6" strokeWidth="2" />
-                        </>
-                      );
-                    })()}
-                    {/* Y-axis labels with min/max values */}
-                    {(() => {
-                      const trackData = flightTrack?.path || aircraftTrails[displayAircraft.hex] || [];
-                      if (trackData.length < 2) return null;
-                      const maxAlt = Math.max(...trackData.map(t => t.altitude_ft || 0), 1000);
-                      return (
-                        <>
-                          <text x="5" y="15" fill="#64b5f6" fontSize="8">{(maxAlt / 1000).toFixed(0)}k</text>
-                          <text x="5" y="108" fill="#64b5f6" fontSize="8">0</text>
-                          {graphHoverData && <line x1={graphHoverData.x * 3.2} y1="10" x2={graphHoverData.x * 3.2} y2="105" stroke="#fff" strokeWidth="1" strokeDasharray="3,3" />}
-                        </>
-                      );
-                    })()}
-                  </svg>
-                  {/* Hover Tooltip */}
-                  {graphHoverData && (
-                    <div className="graph-hover-tooltip" style={{ left: `${Math.min(Math.max(graphHoverData.x, 15), 85)}%`, transform: 'translateX(-50%)' }}>
-                      <div className="tooltip-altitude">{graphHoverData.altitude?.toLocaleString()} ft</div>
-                      {graphHoverData.time && <div className="tooltip-time">{graphHoverData.time}</div>}
-                    </div>
-                  )}
-                  <div className="graph-info">
-                    {(() => {
-                      const trackData = flightTrack?.path || aircraftTrails[displayAircraft.hex] || [];
-                      const validAltData = trackData.filter(t => typeof t.altitude_ft === 'number' && !isNaN(t.altitude_ft) && t.altitude_ft >= 0);
-                      if (validAltData.length < 2) return null;
-                      const fp = validAltData[0], lp = validAltData[validAltData.length - 1];
-                      const startTime = fp.time ? new Date(fp.time * 1000).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : fp.timestamp ? new Date(fp.timestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null;
-                      const endTime = lp.time ? new Date(lp.time * 1000).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : lp.timestamp ? new Date(lp.timestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null;
-                      const altChange = lp.altitude_ft - fp.altitude_ft;
-                      return (
-                        <div className="graph-summary">
-                          <span className="flight-duration">{startTime || '--:--'} ~ {endTime || '현재'}</span>
-                          <span className={`alt-change ${altChange > 500 ? 'climbing' : altChange < -500 ? 'descending' : ''}`}>
-                            {fp.altitude_ft?.toLocaleString()}ft → {lp.altitude_ft?.toLocaleString()}ft ({altChange > 0 ? '+' : ''}{altChange?.toLocaleString()}ft)
-                          </span>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Position Info */}
-            <div className="aircraft-position-section">
-              <div className="section-title">위치 정보</div>
-              <div className="position-data">
-                <div className="position-item">
-                  <span className="pos-label">LAT</span>
-                  <span className="pos-value">{displayAircraft.lat?.toFixed(5) || '-'}</span>
-                </div>
-                <div className="position-item">
-                  <span className="pos-label">LON</span>
-                  <span className="pos-value">{displayAircraft.lon?.toFixed(5) || '-'}</span>
-                </div>
-              </div>
-              <div className="data-source">
-                <span>📡 ADS-B: airplanes.live | 기체DB: hexdb.io</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-        );
-      })()}
+      <AircraftDetailPanel
+        showAircraftPanel={showAircraftPanel}
+        setShowAircraftPanel={setShowAircraftPanel}
+        selectedAircraft={selectedAircraft}
+        setSelectedAircraft={setSelectedAircraft}
+        aircraft={aircraft}
+        aircraftPhoto={aircraftPhoto}
+        aircraftPhotoLoading={aircraftPhotoLoading}
+        aircraftDetails={aircraftDetails}
+        aircraftDetailsLoading={aircraftDetailsLoading}
+        flightSchedule={flightSchedule}
+        flightScheduleLoading={flightScheduleLoading}
+        flightTrack={flightTrack}
+        flightTrackLoading={flightTrackLoading}
+        aircraftTrails={aircraftTrails}
+        sectionExpanded={sectionExpanded}
+        toggleSection={toggleSection}
+        graphHoverData={graphHoverData}
+        setGraphHoverData={setGraphHoverData}
+        data={data}
+        atcData={atcData}
+        getAircraftImage={getAircraftImage}
+        detectFlightPhase={detectFlightPhase}
+        detectCurrentAirspace={detectCurrentAirspace}
+        findNearestWaypoints={findNearestWaypoints}
+        detectCurrentProcedure={detectCurrentProcedure}
+        AIRPORT_DATABASE={AIRPORT_DATABASE}
+      />
 
       {/* Right Weather Panel */}
-      <div className={`wx-right-panel ${showWxPanel ? 'open' : ''}`}>
-        {showWxPanel && (
-          <div className="wx-panel-content">
-            <div className="wx-panel-header">
-              <h3>항공기상 정보</h3>
-              <button className="wx-close-btn" onClick={() => setShowWxPanel(false)}>×</button>
-            </div>
-
-            <div className="wx-tabs">
-              <button className={`wx-tab ${wxPanelTab === 'sigmet' ? 'active' : ''}`} onClick={() => setWxPanelTab('sigmet')}>
-                SIGMET
-                {sigmetData?.international?.length > 0 && <span className="wx-badge warn">{sigmetData.international.length}</span>}
-              </button>
-              <button className={`wx-tab ${wxPanelTab === 'notam' ? 'active' : ''}`} onClick={() => setWxPanelTab('notam')}>
-                NOTAM
-                {((notamData?.RKPU?.length || 0) + (notamData?.RKPK?.length || 0)) > 0 && <span className="wx-badge">{(notamData?.RKPU?.length || 0) + (notamData?.RKPK?.length || 0)}</span>}
-              </button>
-              <button className={`wx-tab ${wxPanelTab === 'lightning' ? 'active' : ''}`} onClick={() => setWxPanelTab('lightning')}>
-                낙뢰
-                {lightningData?.strikes?.length > 0 && <span className="wx-badge alert">{lightningData.strikes.length}</span>}
-              </button>
-            </div>
-
-            <div className="wx-tab-content">
-              {wxPanelTab === 'sigmet' && (
-                <div className="wx-sigmet-list">
-                  <div className="wx-section-title">
-                    <span>한국 FIR SIGMET</span>
-                    <span className="wx-count">{sigmetData?.kma?.length || 0}건</span>
-                  </div>
-                  {(!sigmetData?.kma || sigmetData.kma.length === 0) && (
-                    <div className="wx-no-data">현재 발효중인 SIGMET 없음</div>
-                  )}
-                  {sigmetData?.kma?.map((sig, i) => (
-                    <div key={i} className={`wx-sigmet-item hazard-${(sig.hazard || 'unknown').toLowerCase()}`}>
-                      <div className="sigmet-header">
-                        <span className="sigmet-type">{sig.hazard || 'SIGMET'}</span>
-                        <span className="sigmet-id">{sig.seriesId}</span>
-                      </div>
-                      <div className="sigmet-raw">{sig.rawSigmet}</div>
-                    </div>
-                  ))}
-
-                  <div className="wx-section-title" style={{ marginTop: '16px' }}>
-                    <span>국제 SIGMET (전 세계)</span>
-                    <span className="wx-count">{sigmetData?.international?.length || 0}건</span>
-                  </div>
-                  {sigmetData?.international?.slice(0, 15).map((sig, i) => (
-                    <div key={i} className={`wx-sigmet-item hazard-${(sig.hazard || 'unknown').toLowerCase()}`}>
-                      <div className="sigmet-header">
-                        <span className="sigmet-type">{sig.hazard || 'SIGMET'}</span>
-                        <span className="sigmet-fir">{sig.firName?.split(' ')[0]}</span>
-                        <span className="sigmet-id">{sig.seriesId}</span>
-                      </div>
-                      <div className="sigmet-info">
-                        {sig.base && sig.top && <span>FL{Math.round(sig.base/100)}-{Math.round(sig.top/100)}</span>}
-                        {sig.dir && sig.spd && <span>MOV {sig.dir} {sig.spd}kt</span>}
-                      </div>
-                      <div className="sigmet-raw">{sig.rawSigmet?.slice(0, 200)}...</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {wxPanelTab === 'notam' && (
-                <div className="wx-notam-list">
-                  <div className="wx-section-title">
-                    <span>RKPU NOTAM</span>
-                    <span className="wx-count">{(notamData?.RKPU?.length || 0) + (notamData?.RKPK?.length || 0)}건</span>
-                  </div>
-                  {(!notamData || ((notamData.RKPU?.length || 0) + (notamData.RKPK?.length || 0) === 0)) && (
-                    <div className="wx-no-data">{notamData?.note || '현재 발효중인 NOTAM 없음'}</div>
-                  )}
-                  {notamData?.RKPU?.slice(0, 15).map((notam, i) => (
-                    <div key={`rkpu-${i}`} className="wx-notam-item">
-                      <div className="notam-header">
-                        <span className="notam-id">{notam.notam_id || `RKPU #${i + 1}`}</span>
-                        <span className="notam-type">{notam.classification || 'NOTAM'}</span>
-                      </div>
-                      <div className="notam-text">{notam.traditional_message || notam.message || JSON.stringify(notam).slice(0, 300)}</div>
-                    </div>
-                  ))}
-                  {notamData?.RKPK?.length > 0 && (
-                    <>
-                      <div className="wx-section-title" style={{marginTop: '12px'}}>
-                        <span>RKPK 김해공항 NOTAM</span>
-                        <span className="wx-count">{notamData.RKPK.length}건</span>
-                      </div>
-                      {notamData.RKPK.slice(0, 10).map((notam, i) => (
-                        <div key={`rkpk-${i}`} className="wx-notam-item">
-                          <div className="notam-header">
-                            <span className="notam-id">{notam.notam_id || `RKPK #${i + 1}`}</span>
-                            <span className="notam-type">{notam.classification || 'NOTAM'}</span>
-                          </div>
-                          <div className="notam-text">{notam.traditional_message || notam.message || JSON.stringify(notam).slice(0, 300)}</div>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {wxPanelTab === 'lightning' && (
-                <div className="wx-lightning-list">
-                  <div className="wx-section-title">
-                    <span>낙뢰 정보 (1시간)</span>
-                    <span className="wx-count">{lightningData?.strikes?.length || 0}건</span>
-                  </div>
-                  {(!lightningData?.strikes || lightningData.strikes.length === 0) && (
-                    <div className="wx-no-data">최근 1시간 내 낙뢰 발생 없음</div>
-                  )}
-                  <div className="lightning-summary">
-                    {lightningData?.timeRange && (
-                      <div className="lightning-time">
-                        관측기간: {lightningData.timeRange.start?.slice(8, 12)} - {lightningData.timeRange.end?.slice(8, 12)}
-                      </div>
-                    )}
-                  </div>
-                  {lightningData?.strikes?.slice(0, 50).map((strike, i) => (
-                    <div key={i} className="wx-lightning-item">
-                      <span className="lightning-icon">⚡</span>
-                      <span className="lightning-pos">{strike.lat?.toFixed(3)}°N {strike.lon?.toFixed(3)}°E</span>
-                      {strike.amplitude && <span className="lightning-amp">{strike.amplitude}kA</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="wx-legend">
-              <div className="legend-title">SIGMET 유형</div>
-              <div className="legend-items">
-                <span className="legend-item"><span className="legend-color turb"></span>TURB 난류</span>
-                <span className="legend-item"><span className="legend-color ice"></span>ICE 착빙</span>
-                <span className="legend-item"><span className="legend-color ts"></span>TS 뇌우</span>
-                <span className="legend-item"><span className="legend-color va"></span>VA 화산재</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      <WeatherPanel
+        showWxPanel={showWxPanel}
+        setShowWxPanel={setShowWxPanel}
+        wxPanelTab={wxPanelTab}
+        setWxPanelTab={setWxPanelTab}
+        sigmetData={sigmetData}
+        notamData={notamData}
+        lightningData={lightningData}
+      />
     </div>
   );
 }

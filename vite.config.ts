@@ -23,6 +23,31 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    proxy: {
+      '/api/aircraft-trace': {
+        target: 'https://api.airplanes.live',
+        changeOrigin: true,
+        rewrite: (path) => {
+          const hex = new URLSearchParams(path.split('?')[1]).get('hex');
+          return `/v2/hex/${hex}`;
+        },
+      },
+      '/api/aircraft': {
+        target: 'https://api.airplanes.live',
+        changeOrigin: true,
+        rewrite: (path) => {
+          const params = new URLSearchParams(path.split('?')[1]);
+          const lat = params.get('lat');
+          const lon = params.get('lon');
+          const radius = params.get('radius') || '100';
+          return `/v2/point/${lat}/${lon}/${radius}`;
+        },
+      },
+      '/api/weather': {
+        target: 'https://rkpu-viewer.vercel.app',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     sourcemap: true,
