@@ -7,7 +7,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 mapboxgl.accessToken = 'pk.eyJ1IjoiYWxsb2ZkYW5pZWwiLCJhIjoiY21pbzY5ejhkMDJvZzNjczVwMmlhYTljaiJ9.eSoww-z9bQuolQ4fQHqZOg';
 
 const IS_PRODUCTION = import.meta.env.PROD;
-const AIRCRAFT_UPDATE_INTERVAL = 5000; // 5초 간격 (rate limit 방지)
+const AIRCRAFT_UPDATE_INTERVAL = 2000;
 
 // NOTAM Cache settings - 메모리 캐시 사용 (localStorage는 용량 초과로 실패)
 const NOTAM_CACHE_DURATION = 10 * 60 * 1000; // 10분 캐시 유지
@@ -345,15 +345,14 @@ const TRAIL_DURATION_OPTIONS = [
   { label: '1시간', value: 3600000 },
 ];
 
-// Vercel API base URL - 앱과 웹 모두에서 동작하도록 절대 URL 사용
-const API_BASE_URL = 'https://rkpu-viewer.vercel.app';
-
 const getAircraftApiUrl = (lat, lon, radius = 100) => {
-  return `${API_BASE_URL}/api/aircraft?lat=${lat}&lon=${lon}&radius=${radius}`;
+  if (IS_PRODUCTION) return `/api/aircraft?lat=${lat}&lon=${lon}&radius=${radius}`;
+  return `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}`;
 };
 
 const getAircraftTraceUrl = (hex) => {
-  return `${API_BASE_URL}/api/aircraft-trace?hex=${hex}`;
+  if (IS_PRODUCTION) return `/api/aircraft-trace?hex=${hex}`;
+  return `https://api.airplanes.live/v2/hex/${hex}`;
 };
 
 const generateColor = (index, total, hueOffset = 0) => `hsl(${(index * (360 / Math.max(total, 1)) + hueOffset) % 360}, 80%, 55%)`;
@@ -1026,6 +1025,47 @@ function App() {
   const aircraftMeshesRef = useRef({});
   const procedureObjectsRef = useRef([]);
 
+  // Android WebView height fix - Critical for Galaxy S25 Ultra full-screen display
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+
+  useEffect(() => {
+    const updateHeight = () => {
+      // Get the actual viewport height (Android WebView compatible)
+      const vh = Math.max(
+        document.documentElement.clientHeight || 0,
+        window.innerHeight || 0,
+        window.screen?.availHeight || 0
+      );
+      setWindowHeight(vh);
+
+      // Also set CSS custom property for CSS usage
+      document.documentElement.style.setProperty('--app-height', `${vh}px`);
+
+      // Force map resize if available
+      if (map.current) {
+        setTimeout(() => map.current.resize(), 50);
+      }
+    };
+
+    updateHeight();
+
+    window.addEventListener('resize', updateHeight);
+    window.addEventListener('orientationchange', updateHeight);
+    window.addEventListener('load', updateHeight);
+
+    // Delayed updates for Android WebView initialization
+    const timeouts = [100, 300, 500, 1000, 2000, 3000].map(delay =>
+      setTimeout(updateHeight, delay)
+    );
+
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      window.removeEventListener('orientationchange', updateHeight);
+      window.removeEventListener('load', updateHeight);
+      timeouts.forEach(clearTimeout);
+    };
+  }, []);
+
   useEffect(() => {
     fetch('/aviation_data.json')
       .then((res) => res.json())
@@ -1099,8 +1139,8 @@ function App() {
       // Use proxy API to avoid CORS issues with KMA API
       // Add cache buster to ensure fresh data from KMA AMOS
       const cacheBuster = `&_t=${Date.now()}`;
-      const metarUrl = `${API_BASE_URL}/api/weather?type=metar${cacheBuster}`;
-      const tafUrl = `${API_BASE_URL}/api/weather?type=taf${cacheBuster}`;
+      const metarUrl = IS_PRODUCTION ? `/api/weather?type=metar${cacheBuster}` : `https://rkpu-viewer.vercel.app/api/weather?type=metar${cacheBuster}`;
+      const tafUrl = IS_PRODUCTION ? `/api/weather?type=taf${cacheBuster}` : `https://rkpu-viewer.vercel.app/api/weather?type=taf${cacheBuster}`;
 
       const [metarRes, tafRes] = await Promise.all([
         fetch(metarUrl),
@@ -1140,7 +1180,8 @@ function App() {
     setNotamLoading(true);
     setNotamError(null);
     try {
-      const baseUrl = `${API_BASE_URL}/api/notam`;
+      // Use production URL in development, local API in production
+      const baseUrl = IS_PRODUCTION ? '/api/notam' : 'https://rkpu-viewer.vercel.app/api/notam';
       const params = new URLSearchParams();
 
       // Always use complete DB with appropriate period filter
@@ -1194,7 +1235,7 @@ function App() {
 
   // Fetch aviation weather layers when toggled
   useEffect(() => {
-    const baseUrl = `${API_BASE_URL}/api/weather`;
+    const baseUrl = IS_PRODUCTION ? '/api/weather' : 'https://rkpu-viewer.vercel.app/api/weather';
 
     if (showRadar) {
       fetch(`${baseUrl}?type=radar`).then(r => r.json()).then(setRadarData).catch(console.error);
@@ -1206,7 +1247,7 @@ function App() {
   }, [showRadar]);
 
   useEffect(() => {
-    const baseUrl = `${API_BASE_URL}/api/weather`;
+    const baseUrl = IS_PRODUCTION ? '/api/weather' : 'https://rkpu-viewer.vercel.app/api/weather';
 
     if (showSatelliteWx) {
       fetch(`${baseUrl}?type=satellite`).then(r => r.json()).then(setSatelliteWxData).catch(console.error);
@@ -1214,7 +1255,7 @@ function App() {
   }, [showSatelliteWx]);
 
   useEffect(() => {
-    const baseUrl = `${API_BASE_URL}/api/weather`;
+    const baseUrl = IS_PRODUCTION ? '/api/weather' : 'https://rkpu-viewer.vercel.app/api/weather';
 
     if (showLightning) {
       fetch(`${baseUrl}?type=lightning`).then(r => r.json()).then(setLightningData).catch(console.error);
@@ -1226,7 +1267,7 @@ function App() {
   }, [showLightning]);
 
   useEffect(() => {
-    const baseUrl = `${API_BASE_URL}/api/weather`;
+    const baseUrl = IS_PRODUCTION ? '/api/weather' : 'https://rkpu-viewer.vercel.app/api/weather';
 
     if (showSigmet || showWxPanel) {
       fetch(`${baseUrl}?type=sigmet`).then(r => r.json()).then(setSigmetData).catch(console.error);
@@ -1456,66 +1497,10 @@ function App() {
       ctx.fill();
       map.current.addImage('trail-arrow', ctx.getImageData(0, 0, arrowSize, arrowSize), { sdf: true });
 
-      // Force resize for Android WebView compatibility
-      // WebView often has delayed container sizing, so we need aggressive resize calls
-      const doResize = () => {
-        if (map.current) {
-          map.current.resize();
-          // Also trigger a re-render by slightly adjusting and restoring center
-          const center = map.current.getCenter();
-          map.current.setCenter([center.lng + 0.0001, center.lat]);
-          setTimeout(() => {
-            if (map.current) map.current.setCenter(center);
-          }, 50);
-        }
-      };
-
-      doResize();
-      setTimeout(doResize, 100);
-      setTimeout(doResize, 300);
-      setTimeout(doResize, 500);
-      setTimeout(doResize, 1000);
-      setTimeout(doResize, 2000);
-      setTimeout(doResize, 3000);
-      setTimeout(doResize, 5000);
-
-      // Keep checking for 10 seconds after load
-      const resizeInterval = setInterval(() => {
-        if (map.current) map.current.resize();
-      }, 1000);
-      setTimeout(() => clearInterval(resizeInterval), 10000);
-
       setMapLoaded(true);
     });
 
-    // Window resize handler for WebView compatibility
-    const handleResize = () => {
-      if (map.current) map.current.resize();
-    };
-    window.addEventListener('resize', handleResize);
-
-    // Also listen for orientation change
-    window.addEventListener('orientationchange', () => {
-      setTimeout(handleResize, 100);
-      setTimeout(handleResize, 500);
-    });
-
-    // ResizeObserver for container size changes
-    const resizeObserver = new ResizeObserver(() => {
-      if (map.current) map.current.resize();
-    });
-    if (mapContainer.current) {
-      resizeObserver.observe(mapContainer.current);
-    }
-
-    // Also observe document body for any size changes
-    resizeObserver.observe(document.body);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      resizeObserver.disconnect();
-      if (map.current) { map.current.remove(); map.current = null; }
-    };
+    return () => { if (map.current) { map.current.remove(); map.current = null; } };
   }, []);
 
   // Handle terrain toggle
@@ -2803,15 +2788,14 @@ function App() {
 
         if (extendedTrail.length < 2) return;
 
-        // 연속 항적 - 모든 세그먼트를 끊김 없이 표시
+        // 세그먼트별로 opacity 계산하여 리본 생성 (오래된 것 = 연하게)
+        // 점선 효과: 2개 그리고 1개 건너뛰기
         for (let i = 0; i < extendedTrail.length - 1; i++) {
+          // 점선 효과 - 매 3번째 세그먼트 건너뛰기
+          if (i % 3 === 2) continue;
+
           const p1 = extendedTrail[i];
           const p2 = extendedTrail[i + 1];
-
-          // 두 점 사이 거리가 너무 멀면 (비정상 점프) 건너뛰기
-          const dist = Math.sqrt(Math.pow(p2.lon - p1.lon, 2) + Math.pow(p2.lat - p1.lat, 2));
-          if (dist > 0.1) continue; // 약 10km 이상 점프는 무시
-
           // 세그먼트의 중간 시간으로 opacity 계산
           const segTime = (p1.timestamp + p2.timestamp) / 2;
           const age = now - segTime;
@@ -4019,8 +4003,19 @@ function App() {
   };
 
   return (
-    <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'}`}>
-      <div ref={mapContainer} id="map" />
+    <div
+      className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'}`}
+      style={{
+        height: `${windowHeight}px`,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        overflow: 'hidden'
+      }}
+    >
+      <div ref={mapContainer} id="map" style={{ height: `${windowHeight}px` }} />
 
       {/* Time & Weather Display */}
       <div className="time-weather-display">

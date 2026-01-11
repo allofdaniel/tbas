@@ -20,6 +20,44 @@
 
     <!-- Mapbox CSS -->
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.css" rel="stylesheet" />
+
+    <!-- Critical: Set viewport height for Android WebView -->
+    <style>
+      html, body, #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+      }
+    </style>
+    <script>
+      // Force full height on Android WebView
+      (function() {
+        function setAppHeight() {
+          var vh = window.innerHeight;
+          document.documentElement.style.setProperty('--app-height', vh + 'px');
+          document.documentElement.style.height = vh + 'px';
+          document.body.style.height = vh + 'px';
+          var root = document.getElementById('root');
+          if (root) root.style.height = vh + 'px';
+        }
+        setAppHeight();
+        window.addEventListener('resize', setAppHeight);
+        window.addEventListener('orientationchange', setAppHeight);
+        window.addEventListener('load', setAppHeight);
+        // Delayed updates for Android WebView
+        setTimeout(setAppHeight, 100);
+        setTimeout(setAppHeight, 300);
+        setTimeout(setAppHeight, 500);
+        setTimeout(setAppHeight, 1000);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
