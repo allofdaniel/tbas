@@ -1,24 +1,69 @@
 // Vercel Serverless Function - OpenSky Trino Historical Flight Data API
 // Fetches complete flight history from takeoff to landing
+// Uses OAuth2 authentication (OpenSky requires external auth for Trino)
 
-const TRINO_HOST = 'trino.opensky-network.org';
-const TRINO_PORT = 8080;  // OpenSky Trino uses HTTP on port 8080
-const OPENSKY_USER = process.env.OPENSKY_USERNAME || 'danielkim';
-const OPENSKY_PASS = process.env.OPENSKY_PASSWORD || '';
-const TRINO_PROTOCOL = 'https';  // OpenSky uses HTTPS with port 8080
+const TRINO_URL = 'https://trino.opensky-network.org/v1/statement';
+const OPENSKY_AUTH_URL = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token';
+const OPENSKY_CLIENT_ID = process.env.OPENSKY_CLIENT_ID || '';
+const OPENSKY_CLIENT_SECRET = process.env.OPENSKY_CLIENT_SECRET || '';
+const OPENSKY_USER = process.env.OPENSKY_USERNAME || '';
+
+// Token cache to avoid re-authenticating every request
+let tokenCache = { token: null, expires: 0 };
 
 /**
- * Execute a Trino query via REST API
+ * Get OAuth2 access token from OpenSky
  */
-async function executeTrinoQuery(query) {
-  const auth = Buffer.from(`${OPENSKY_USER}:${OPENSKY_PASS}`).toString('base64');
+async function getAccessToken() {
+  // Return cached token if still valid
+  if (tokenCache.token && tokenCache.expires > Date.now()) {
+    return tokenCache.token;
+  }
 
-  // Initial query submission
-  const response = await fetch(`${TRINO_PROTOCOL}://${TRINO_HOST}:${TRINO_PORT}/v1/statement`, {
+  if (!OPENSKY_CLIENT_ID || !OPENSKY_CLIENT_SECRET) {
+    throw new Error('OpenSky OAuth2 credentials not configured. Set OPENSKY_CLIENT_ID and OPENSKY_CLIENT_SECRET.');
+  }
+
+  const response = await fetch(OPENSKY_AUTH_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Basic ${auth}`,
-      'X-Trino-User': OPENSKY_USER,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: OPENSKY_CLIENT_ID,
+      client_secret: OPENSKY_CLIENT_SECRET,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OAuth2 token request failed: ${response.status} - ${text}`);
+  }
+
+  const data = await response.json();
+
+  // Cache the token with a 5-minute buffer before expiration
+  tokenCache = {
+    token: data.access_token,
+    expires: Date.now() + ((data.expires_in - 300) * 1000),
+  };
+
+  return data.access_token;
+}
+
+/**
+ * Execute a Trino query via REST API with OAuth2 authentication
+ */
+async function executeTrinoQuery(query) {
+  const accessToken = await getAccessToken();
+
+  // Initial query submission
+  const response = await fetch(TRINO_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'X-Trino-User': OPENSKY_USER || 'anonymous',
       'X-Trino-Catalog': 'minio',
       'X-Trino-Schema': 'osky',
       'Content-Type': 'text/plain',
@@ -46,8 +91,8 @@ async function executeTrinoQuery(query) {
 
     const nextResponse = await fetch(result.nextUri, {
       headers: {
-        'Authorization': `Basic ${auth}`,
-        'X-Trino-User': OPENSKY_USER,
+        'Authorization': `Bearer ${accessToken}`,
+        'X-Trino-User': OPENSKY_USER || 'anonymous',
       },
     });
 
@@ -151,8 +196,9 @@ export default async function handler(req, res) {
     `;
 
     console.log('Executing Trino query for icao24:', icao24);
-    console.log('Trino endpoint:', `${TRINO_PROTOCOL}://${TRINO_HOST}:${TRINO_PORT}/v1/statement`);
+    console.log('Trino endpoint:', TRINO_URL);
     console.log('Time range:', new Date(startTime * 1000).toISOString(), '~', new Date(endTime * 1000).toISOString());
+    console.log('OAuth2 configured:', !!OPENSKY_CLIENT_ID && !!OPENSKY_CLIENT_SECRET);
     const { columns, data } = await executeTrinoQuery(query);
     const results = resultsToObjects(columns, data);
 
