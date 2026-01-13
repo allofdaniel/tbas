@@ -38,12 +38,14 @@ const useChartOverlay = (map, mapLoaded, activeCharts, chartOpacities, chartBoun
           });
         }
         if (!map.current.getLayer(layerId)) {
+          // Find a suitable layer to insert before, or add on top
+          const beforeLayer = map.current.getLayer('runway') ? 'runway' : undefined;
           map.current.addLayer({
             id: layerId,
             type: 'raster',
             source: sourceId,
             paint: { 'raster-opacity': chartOpacities[chartId] || 0.7 }
-          }, 'runway');
+          }, beforeLayer);
         } else {
           map.current.setPaintProperty(layerId, 'raster-opacity', chartOpacities[chartId] || 0.7);
         }

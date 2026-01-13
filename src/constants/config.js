@@ -10,7 +10,7 @@ export const IS_PRODUCTION = import.meta.env.PROD;
 export const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoiYWxsb2ZkYW5pZWwiLCJhIjoiY21pbzY5ejhkMDJvZzNjczVwMmlhYTljaiJ9.eSoww-z9bQuolQ4fQHqZOg';
 
 // 항공기 업데이트 간격 (밀리초)
-export const AIRCRAFT_UPDATE_INTERVAL = 2000;
+export const AIRCRAFT_UPDATE_INTERVAL = 5000;
 
 // NOTAM 캐시 설정
 export const NOTAM_CACHE_DURATION = 10 * 60 * 1000; // 10분

@@ -75,8 +75,8 @@ export class AircraftApiClient extends BaseApiClient {
 
   constructor(options?: { timeout?: number; retries?: number }) {
     super(API_BASE_URL, options);
-    this.positionCache = new SimpleCache<AircraftPosition[]>(3000); // 3초 캐시
-    this.trailCache = new SimpleCache<AircraftTrailPoint[]>(5000); // 5초 캐시
+    this.positionCache = new SimpleCache<AircraftPosition[]>(10000); // 10초 캐시
+    this.trailCache = new SimpleCache<AircraftTrailPoint[]>(15000); // 15초 캐시
     this.photoCache = new SimpleCache<string>(3600000); // 1시간 캐시
   }
 
