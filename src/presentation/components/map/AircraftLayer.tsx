@@ -5,7 +5,7 @@
  * 지도 위 항공기 표시 레이어
  */
 
-import React, { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { useMapContext } from '../../contexts/MapContext';
 import { useAircraftContext } from '../../contexts/AircraftContext';
@@ -14,7 +14,6 @@ import { AIRCRAFT_CATEGORY_COLORS, FLIGHT_PHASE_COLORS } from '@/config/constant
 
 const AIRCRAFT_SOURCE_ID = 'aircraft-source';
 const AIRCRAFT_LAYER_ID = 'aircraft-layer';
-const AIRCRAFT_SELECTED_LAYER_ID = 'aircraft-selected-layer';
 
 interface AircraftLayerProps {
   colorBy?: 'category' | 'flightPhase' | 'altitude';
@@ -33,7 +32,6 @@ export function AircraftLayer({
   const { mapRef, isMapLoaded, selectedAircraftHex, selectAircraft, layerVisibility } =
     useMapContext();
   const { aircraft } = useAircraftContext();
-  const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
 
   /**
    * GeoJSON 데이터 생성

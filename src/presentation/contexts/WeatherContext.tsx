@@ -6,7 +6,8 @@
  */
 
 import React, { createContext, useContext, useMemo } from 'react';
-import type { MetarData, TafData, SigmetData, UpperWindData } from '@/types';
+import type { MetarData, TafData, SigmetData, LightningStrike } from '@/types';
+import type { UpperWindData, LlwsData, RadarData, SatelliteData } from '@/domain/repositories/IWeatherRepository';
 import { useWeather } from '../hooks/useWeather';
 import { WEATHER_UPDATE_INTERVAL } from '@/config/constants';
 
@@ -21,39 +22,10 @@ interface WeatherContextValue {
   sigmets: SigmetData[];
   airmets: SigmetData[];
   upperWind: UpperWindData | null;
-  llws: Array<{
-    station: string;
-    time: string;
-    runway: string;
-    type: string;
-    value: string | null;
-    raw: string;
-  }>;
-  radar: {
-    composite: string;
-    echoTop: string;
-    vil: string;
-    time: string;
-    bounds: number[][];
-  } | null;
-  satellite: {
-    vis: string;
-    ir: string;
-    wv: string;
-    enhir: string;
-    time: string;
-    bounds: number[][];
-  } | null;
-  lightning: {
-    strikes: Array<{
-      time: string;
-      lat: number;
-      lon: number;
-      amplitude: number | null;
-      type: string;
-    }>;
-    timeRange: { start: string; end: string };
-  } | null;
+  llws: LlwsData[];
+  radar: RadarData | null;
+  satellite: SatelliteData | null;
+  lightning: LightningStrike[];
   weatherRisk: WeatherRisk | null;
   isLoading: boolean;
   error: Error | null;

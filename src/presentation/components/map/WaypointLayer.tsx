@@ -5,7 +5,7 @@
  * 웨이포인트 표시 레이어
  */
 
-import React, { useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { useMapContext } from '../../contexts/MapContext';
 import type { Waypoint } from '@/types';
@@ -59,21 +59,6 @@ export function WaypointLayer({
     },
     [selectedId]
   );
-
-  /**
-   * 타입별 색상
-   */
-  const getTypeColor = useCallback((type: string): string => {
-    const colors: Record<string, string> = {
-      waypoint: '#00BCD4',
-      vor: '#9C27B0',
-      ndb: '#FF9800',
-      fix: '#4CAF50',
-      airport: '#F44336',
-      ils: '#2196F3',
-    };
-    return colors[type] || color;
-  }, [color]);
 
   /**
    * 레이어 초기화

@@ -1,7 +1,7 @@
 {
-  "name": "RKPU 울산공항 비행절차 뷰어",
-  "short_name": "RKPU Viewer",
-  "description": "울산공항(RKPU) 비행절차 및 실시간 항공기 추적 시스템",
+  "name": "TBAS - 궤적기반 상황인식 시스템",
+  "short_name": "TBAS",
+  "description": "TBAS (Trajectory-Based Awareness System) - 궤적기반 상황인식 시스템",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a2e",

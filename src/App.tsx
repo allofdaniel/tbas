@@ -1,5 +1,6 @@
 /**
- * RKPU-Viewer Application
+ * TBAS (Trajectory-Based Awareness System) Application
+ * 궤적기반 상황인식 시스템
  * DO-278A 요구사항 추적: SRS-APP-001
  *
  * Clean Architecture 기반 메인 애플리케이션 컴포넌트
@@ -19,12 +20,19 @@ import { AircraftLayer } from '@/presentation/components/map/AircraftLayer';
 import { TrailLayer } from '@/presentation/components/map/TrailLayer';
 import { WaypointLayer } from '@/presentation/components/map/WaypointLayer';
 import { AirspaceLayer } from '@/presentation/components/map/AirspaceLayer';
+import { ChartLayer } from '@/presentation/components/map/ChartLayer';
+import type { ChartData } from '@/presentation/components/map/ChartLayer';
 
 // Panel Components
 import { AircraftInfoPanel } from '@/presentation/components/Panels/AircraftInfoPanel';
 import { WeatherPanel } from '@/presentation/components/Panels/WeatherPanel';
 import { ControlPanel } from '@/presentation/components/Panels/ControlPanel';
 import { AircraftListPanel } from '@/presentation/components/Panels/AircraftListPanel';
+import { ChartPanel } from '@/presentation/components/Panels/ChartPanel';
+
+// Services
+import { getAirportCharts, getMockChartData } from '@/services/chartService';
+import { AIRPORT_COORDINATES } from '@/config/airports';
 
 // Hooks
 import { useGIS } from '@/presentation/hooks/useGIS';
@@ -37,6 +45,49 @@ import {
 } from '@/config/constants';
 
 /**
+ * Android WebView에서 실제 화면 높이 계산
+ */
+function useWindowHeight() {
+  const [height, setHeight] = useState(window.innerHeight);
+
+  useEffect(() => {
+    const updateHeight = () => {
+      // 실제 화면 높이 계산 (Android WebView 호환)
+      const vh = Math.max(
+        document.documentElement.clientHeight || 0,
+        window.innerHeight || 0,
+        window.screen.availHeight || 0
+      );
+      setHeight(vh);
+
+      // CSS 변수로도 설정
+      document.documentElement.style.setProperty('--app-height', `${vh}px`);
+    };
+
+    updateHeight();
+
+    // 다양한 이벤트에서 높이 업데이트
+    window.addEventListener('resize', updateHeight);
+    window.addEventListener('orientationchange', updateHeight);
+    window.addEventListener('load', updateHeight);
+
+    // Android에서 초기 로딩 후 지연 업데이트
+    const timeouts = [100, 300, 500, 1000, 2000].map(delay =>
+      setTimeout(updateHeight, delay)
+    );
+
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      window.removeEventListener('orientationchange', updateHeight);
+      window.removeEventListener('load', updateHeight);
+      timeouts.forEach(clearTimeout);
+    };
+  }, []);
+
+  return height;
+}
+
+/**
  * 메인 뷰어 컴포넌트
  */
 function RKPUViewer() {
@@ -44,6 +95,16 @@ function RKPUViewer() {
   const [showControlPanel, setShowControlPanel] = useState(false);
   const [showAircraftList, setShowAircraftList] = useState(false);
   const [showWeather, setShowWeather] = useState(true);
+  const [showCharts, setShowCharts] = useState(false);
+
+  // Chart state
+  const [selectedChartAirport, setSelectedChartAirport] = useState('RKPU');
+  const [selectedChartTypes, setSelectedChartTypes] = useState<string[]>(['ADC', 'IAC', 'VAC']);
+  const [chartOpacity, setChartOpacity] = useState(0.7);
+  const [charts, setCharts] = useState<ChartData[]>([]);
+
+  // Android WebView 높이 계산
+  const windowHeight = useWindowHeight();
 
   // Contexts
   const { selectedAircraftHex, selectAircraft, flyTo } = useMapContext();
@@ -55,6 +116,58 @@ function RKPUViewer() {
     airport: 'RKPU',
     autoLoad: true,
   });
+
+  /**
+   * 차트 데이터 로드
+   */
+  const loadCharts = useCallback(async () => {
+    if (!selectedChartAirport || !showCharts) return;
+
+    try {
+      // Try to load from API first
+      let loadedCharts = await getAirportCharts(
+        selectedChartAirport,
+        undefined,
+        selectedChartTypes.length > 0 ? selectedChartTypes : undefined
+      );
+
+      // If no charts from API, use mock data for development
+      if (loadedCharts.length === 0) {
+        loadedCharts = getMockChartData(selectedChartAirport);
+        if (selectedChartTypes.length > 0) {
+          loadedCharts = loadedCharts.filter((c) => selectedChartTypes.includes(c.chart_type));
+        }
+      }
+
+      setCharts(loadedCharts);
+    } catch (error) {
+      console.error('Failed to load charts:', error);
+      // Fallback to mock data
+      let mockCharts = getMockChartData(selectedChartAirport);
+      if (selectedChartTypes.length > 0) {
+        mockCharts = mockCharts.filter((c) => selectedChartTypes.includes(c.chart_type));
+      }
+      setCharts(mockCharts);
+    }
+  }, [selectedChartAirport, selectedChartTypes, showCharts]);
+
+  useEffect(() => {
+    loadCharts();
+  }, [loadCharts]);
+
+  /**
+   * 공항 변경 시 지도 이동
+   */
+  const handleChartAirportChange = useCallback(
+    (icao: string) => {
+      setSelectedChartAirport(icao);
+      const coords = AIRPORT_COORDINATES[icao];
+      if (coords) {
+        flyTo({ lat: coords.lat, lon: coords.lon }, { zoom: 11 });
+      }
+    },
+    [flyTo]
+  );
 
   /**
    * 항공기 선택 핸들러
@@ -102,6 +215,10 @@ function RKPUViewer() {
       if (e.key === 'w' || e.key === 'W') {
         setShowWeather((prev) => !prev);
       }
+      // H: 차트 패널 토글
+      if (e.key === 'h' || e.key === 'H') {
+        setShowCharts((prev) => !prev);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -111,14 +228,26 @@ function RKPUViewer() {
   return (
     <div
       style={{
-        width: '100vw',
-        height: '100vh',
-        position: 'relative',
+        width: '100%',
+        height: `${windowHeight}px`,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         overflow: 'hidden',
       }}
     >
       {/* 지도 */}
-      <MapContainer>
+      <MapContainer style={{ width: '100%', height: `${windowHeight}px` }}>
+        {showCharts && (
+          <ChartLayer
+            airport={selectedChartAirport}
+            chartTypes={selectedChartTypes.length > 0 ? selectedChartTypes : undefined}
+            opacity={chartOpacity}
+            onChartLoad={setCharts}
+          />
+        )}
         <AircraftLayer colorBy="flightPhase" showLabels />
         <TrailLayer color={TRAIL_COLOR} />
         <WaypointLayer waypoints={waypoints} showLabels />
@@ -156,6 +285,13 @@ function RKPUViewer() {
           title="Weather (W)"
         >
           Weather
+        </ToolbarButton>
+        <ToolbarButton
+          active={showCharts}
+          onClick={() => setShowCharts(!showCharts)}
+          title="AIP Charts (H)"
+        >
+          Charts
         </ToolbarButton>
       </div>
 
@@ -254,6 +390,28 @@ function RKPUViewer() {
         </div>
       )}
 
+      {/* 차트 패널 */}
+      {showCharts && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '60px',
+            right: '16px',
+            zIndex: 100,
+          }}
+        >
+          <ChartPanel
+            selectedAirport={selectedChartAirport}
+            onAirportChange={handleChartAirportChange}
+            selectedChartTypes={selectedChartTypes}
+            onChartTypesChange={setSelectedChartTypes}
+            chartOpacity={chartOpacity}
+            onOpacityChange={setChartOpacity}
+            charts={charts}
+          />
+        </div>
+      )}
+
       {/* 하단 정보 */}
       <div
         style={{
@@ -265,7 +423,7 @@ function RKPUViewer() {
           zIndex: 50,
         }}
       >
-        RKPU-Viewer | Keyboard: C (Settings), L (List), W (Weather), ESC (Deselect)
+        TBAS Viewer | Keys: C (Settings), L (List), W (Weather), H (Charts), ESC (Deselect)
       </div>
     </div>
   );

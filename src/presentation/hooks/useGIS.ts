@@ -123,11 +123,19 @@ export function useGIS(options: UseGISOptions = {}): UseGISReturn {
         repositoryRef.current.getRunways(),
       ]);
 
-      setWaypoints(aviationData.waypoints);
-      setRoutes(aviationData.routes);
-      setAirspaces(aviationData.airspaces);
-      setProcedures(aviationData.procedures);
-      setNavaids(aviationData.navaids);
+      if (aviationData) {
+        setWaypoints(aviationData.waypoints);
+        setRoutes(aviationData.routes || []);
+        setAirspaces(aviationData.airspaces || []);
+        // procedures는 Record 형태이므로 배열로 변환
+        const allProcedures: FlightProcedure[] = [
+          ...Object.values(aviationData.procedures?.SID || {}),
+          ...Object.values(aviationData.procedures?.STAR || {}),
+          ...Object.values(aviationData.procedures?.APPROACH || {}),
+        ];
+        setProcedures(allProcedures);
+        setNavaids(aviationData.navaids);
+      }
       setObstacles(obstacleData);
       setRunways(runwayData);
     } catch (err) {
@@ -147,9 +155,11 @@ export function useGIS(options: UseGISOptions = {}): UseGISReturn {
 
       const nationalData = await repositoryRef.current.loadKoreaAirspace();
 
-      setNationalWaypoints(nationalData.waypoints);
-      setNationalRoutes(nationalData.routes);
-      setNationalAirspaces(nationalData.airspaces);
+      if (nationalData) {
+        setNationalWaypoints(nationalData.waypoints);
+        setNationalRoutes(nationalData.routes);
+        setNationalAirspaces(nationalData.airspaces);
+      }
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Unknown error'));
     } finally {

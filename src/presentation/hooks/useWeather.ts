@@ -6,7 +6,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { MetarData, TafData, SigmetData, UpperWindData } from '@/types';
+import type { MetarData, TafData, SigmetData, LightningStrike } from '@/types';
+import type { UpperWindData, LlwsData, RadarData, SatelliteData } from '@/domain/repositories/IWeatherRepository';
 import { getWeatherRepository } from '@/infrastructure/repositories/WeatherRepository';
 import { assessWeatherRisk } from '@/domain/entities/Weather';
 import { WEATHER_UPDATE_INTERVAL } from '@/config/constants';
@@ -28,39 +29,10 @@ interface UseWeatherReturn {
   sigmets: SigmetData[];
   airmets: SigmetData[];
   upperWind: UpperWindData | null;
-  llws: Array<{
-    station: string;
-    time: string;
-    runway: string;
-    type: string;
-    value: string | null;
-    raw: string;
-  }>;
-  radar: {
-    composite: string;
-    echoTop: string;
-    vil: string;
-    time: string;
-    bounds: number[][];
-  } | null;
-  satellite: {
-    vis: string;
-    ir: string;
-    wv: string;
-    enhir: string;
-    time: string;
-    bounds: number[][];
-  } | null;
-  lightning: {
-    strikes: Array<{
-      time: string;
-      lat: number;
-      lon: number;
-      amplitude: number | null;
-      type: string;
-    }>;
-    timeRange: { start: string; end: string };
-  } | null;
+  llws: LlwsData[];
+  radar: RadarData | null;
+  satellite: SatelliteData | null;
+  lightning: LightningStrike[];
   weatherRisk: WeatherRisk | null;
   isLoading: boolean;
   error: Error | null;
@@ -86,41 +58,10 @@ export function useWeather(options: UseWeatherOptions = {}): UseWeatherReturn {
   const [sigmets, setSigmets] = useState<SigmetData[]>([]);
   const [airmets, setAirmets] = useState<SigmetData[]>([]);
   const [upperWind, setUpperWind] = useState<UpperWindData | null>(null);
-  const [llws, setLlws] = useState<
-    Array<{
-      station: string;
-      time: string;
-      runway: string;
-      type: string;
-      value: string | null;
-      raw: string;
-    }>
-  >([]);
-  const [radar, setRadar] = useState<{
-    composite: string;
-    echoTop: string;
-    vil: string;
-    time: string;
-    bounds: number[][];
-  } | null>(null);
-  const [satellite, setSatellite] = useState<{
-    vis: string;
-    ir: string;
-    wv: string;
-    enhir: string;
-    time: string;
-    bounds: number[][];
-  } | null>(null);
-  const [lightning, setLightning] = useState<{
-    strikes: Array<{
-      time: string;
-      lat: number;
-      lon: number;
-      amplitude: number | null;
-      type: string;
-    }>;
-    timeRange: { start: string; end: string };
-  } | null>(null);
+  const [llws, setLlws] = useState<LlwsData[]>([]);
+  const [radar, setRadar] = useState<RadarData | null>(null);
+  const [satellite, setSatellite] = useState<SatelliteData | null>(null);
+  const [lightning, setLightning] = useState<LightningStrike[]>([]);
   const [weatherRisk, setWeatherRisk] = useState<WeatherRisk | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -144,16 +85,11 @@ export function useWeather(options: UseWeatherOptions = {}): UseWeatherReturn {
           repositoryRef.current.fetchSigmet(),
           repositoryRef.current.fetchAirmet(),
           repositoryRef.current.fetchUpperWind(),
-          repositoryRef.current.fetchLLWS(),
+          repositoryRef.current.fetchLlws(),
         ]);
 
-      const targetMetar =
-        metarData.find((m) => m.icao === icao) || metarData[0] || null;
-      const targetTaf =
-        tafData.find((t) => t.icao === icao) || tafData[0] || null;
-
-      setMetar(targetMetar);
-      setTaf(targetTaf);
+      setMetar(metarData);
+      setTaf(tafData);
       setSigmets(sigmetData);
       setAirmets(airmetData);
       setUpperWind(upperWindData);
@@ -161,10 +97,12 @@ export function useWeather(options: UseWeatherOptions = {}): UseWeatherReturn {
       setLastUpdate(new Date());
 
       // 기상 위험도 평가
-      if (targetMetar) {
+      if (metarData) {
         const risk = assessWeatherRisk({
-          metar: targetMetar,
+          metar: metarData,
           sigmets: sigmetData,
+          lightning: [],
+          lastUpdated: Date.now(),
         });
         setWeatherRisk(risk);
       }

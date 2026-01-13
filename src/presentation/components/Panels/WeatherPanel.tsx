@@ -5,7 +5,6 @@
  * 기상 정보 표시 패널
  */
 
-import React from 'react';
 import type { MetarData, TafData } from '@/types';
 import { FLIGHT_CATEGORY_COLORS } from '@/config/constants';
 
@@ -47,7 +46,7 @@ export function WeatherPanel({
   }
 
   const categoryColor =
-    FLIGHT_CATEGORY_COLORS[metar.flightCategory] || '#9E9E9E';
+    FLIGHT_CATEGORY_COLORS[metar.fltCat || metar.flightCategory || 'VFR'] || '#9E9E9E';
 
   const riskColors: Record<string, string> = {
     low: '#4CAF50',
@@ -173,7 +172,7 @@ export function WeatherPanel({
         />
         <WeatherValue
           label="Visibility"
-          value={`${metar.visibility >= 10 ? '>10' : metar.visibility} km`}
+          value={`${(metar.visib ?? metar.visibility ?? 0) >= 10 ? '>10' : (metar.visib ?? metar.visibility ?? 0)} km`}
         />
         <WeatherValue
           label="Ceiling"
@@ -254,7 +253,7 @@ export function WeatherPanel({
           textAlign: 'right',
         }}
       >
-        Updated: {metar.obsTime?.toLocaleTimeString() || 'N/A'}
+        Updated: {metar.obsTime ? (typeof metar.obsTime === 'string' ? new Date(metar.obsTime).toLocaleTimeString() : metar.obsTime.toLocaleTimeString()) : 'N/A'}
         {metar.source && ` (${metar.source})`}
       </div>
     </div>

@@ -125,7 +125,7 @@ export function MapProvider({
     if (mapRef.current) {
       const styleSpec = MAP_STYLES[style];
       mapRef.current.setStyle(
-        typeof styleSpec === 'string' ? styleSpec : (styleSpec as mapboxgl.Style)
+        typeof styleSpec === 'string' ? styleSpec : (JSON.parse(JSON.stringify(styleSpec)) as mapboxgl.Style)
       );
     }
     setMapStyleState(style);

@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0077be" />
-    <meta name="description" content="울산공항(RKPU) 비행절차 및 실시간 항공기 추적 시스템" />
+    <meta name="description" content="TBAS - 궤적기반 상황인식 시스템 (Trajectory-Based Awareness System)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="RKPU Viewer" />
+    <meta name="apple-mobile-web-app-title" content="TBAS" />
 
-    <title>RKPU 울산공항 비행절차 뷰어</title>
+    <title>TBAS - 궤적기반 상황인식 시스템</title>
 
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
@@ -20,8 +20,49 @@
 
     <!-- Mapbox CSS -->
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.css" rel="stylesheet" />
-    <script type="module" crossorigin src="/assets/index-B6gx69US.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-aSdfSOru.css">
+
+    <!-- Critical: Set viewport height for Android WebView -->
+    <style>
+      html, body, #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+      }
+    </style>
+    <script>
+      // Force full height on Android WebView
+      (function() {
+        function setAppHeight() {
+          var vh = window.innerHeight;
+          document.documentElement.style.setProperty('--app-height', vh + 'px');
+          document.documentElement.style.height = vh + 'px';
+          document.body.style.height = vh + 'px';
+          var root = document.getElementById('root');
+          if (root) root.style.height = vh + 'px';
+        }
+        setAppHeight();
+        window.addEventListener('resize', setAppHeight);
+        window.addEventListener('orientationchange', setAppHeight);
+        window.addEventListener('load', setAppHeight);
+        // Delayed updates for Android WebView
+        setTimeout(setAppHeight, 100);
+        setTimeout(setAppHeight, 300);
+        setTimeout(setAppHeight, 500);
+        setTimeout(setAppHeight, 1000);
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-CNoEok-h.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-CRB3T2We.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-mapbox-D5-KvoyR.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-three-BcvXop4h.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-BjZbkali.css">
   </head>
   <body>
     <div id="root"></div>

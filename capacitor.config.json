@@ -1,6 +1,6 @@
 {
-  "appId": "com.allofdaniel.rkpuviewer",
-  "appName": "RKPU Viewer",
+  "appId": "com.allofdaniel.tbas",
+  "appName": "TBAS",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

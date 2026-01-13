@@ -111,6 +111,7 @@ export const AIRPORT_COORDINATES: Record<string, Coordinate> = {
   RKJK: { lat: 35.9038, lon: 126.6158 },
   RKNW: { lat: 37.4383, lon: 127.9604 },
   RKJJ: { lat: 35.1264, lon: 126.8089 },
+  RKTL: { lat: 36.7892, lon: 129.3511 },  // 울진비행장
   RKNN: { lat: 37.7536, lon: 128.944 },
 
   // 대한민국 군용/기타 공항

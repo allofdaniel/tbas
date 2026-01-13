@@ -7,13 +7,74 @@
  */
 
 import { BaseApiClient, SimpleCache } from './BaseApiClient';
-import type {
-  MetarData,
-  TafData,
-  SigmetData,
-  UpperWindData,
-} from '@/types';
+import type { SigmetData } from '@/types';
 import { API_BASE_URL } from '@/config/constants';
+
+/**
+ * 내부 METAR 데이터 타입 (API 클라이언트 전용)
+ */
+export interface InternalMetarData {
+  icao: string;
+  obsTime: Date;
+  temp?: number;
+  dewpoint?: number;
+  humidity?: number;
+  altimeter: number;
+  windDirection: number;
+  windSpeed: number;
+  windGust?: number;
+  visibility?: number;
+  visibilityMeters?: number;
+  ceiling?: number;
+  ceilingMeters?: number;
+  flightCategory: 'VFR' | 'MVFR' | 'IFR' | 'LIFR';
+  rawMetar: string;
+  source: string;
+  leftVisibility?: number;
+  rightVisibility?: number;
+  leftRvr?: number;
+  rightRvr?: number;
+}
+
+/**
+ * 내부 TAF 데이터 타입 (API 클라이언트 전용)
+ */
+export interface InternalTafData {
+  icao: string;
+  rawTaf: string;
+  issueTime?: Date;
+  validFrom?: Date;
+  validTo?: Date;
+  forecast?: Array<{
+    from?: Date;
+    to?: Date;
+    changeIndicator?: string;
+    windDirection?: number;
+    windSpeed?: number;
+    windGust?: number;
+    visibility?: string;
+    weather?: string;
+    clouds?: Array<{ cover: string; base: number }>;
+  }>;
+}
+
+/**
+ * 내부 상층풍 데이터 타입 (API 클라이언트 전용)
+ */
+export interface InternalUpperWindData {
+  time: string;
+  grid: Array<{
+    lat: number;
+    lon: number;
+    name: string;
+    levels: Record<string, {
+      altitude_m: number;
+      windDirection: number;
+      windSpeed: number;
+    }>;
+  }>;
+  source: string;
+}
 
 /**
  * METAR API 응답 형식
@@ -156,20 +217,20 @@ interface LightningApiResponse {
  * 기상 API 클라이언트
  */
 export class WeatherApiClient extends BaseApiClient {
-  private metarCache: SimpleCache<MetarData[]>;
-  private tafCache: SimpleCache<TafData[]>;
+  private metarCache: SimpleCache<InternalMetarData[]>;
+  private tafCache: SimpleCache<InternalTafData[]>;
   private sigmetCache: SimpleCache<SigmetData[]>;
-  private upperWindCache: SimpleCache<UpperWindData>;
+  private upperWindCache: SimpleCache<InternalUpperWindData>;
   private radarCache: SimpleCache<RadarApiResponse>;
   private satelliteCache: SimpleCache<SatelliteApiResponse>;
   private lightningCache: SimpleCache<LightningApiResponse>;
 
   constructor(options?: { timeout?: number; retries?: number }) {
     super(API_BASE_URL, options);
-    this.metarCache = new SimpleCache<MetarData[]>(30000); // 30초
-    this.tafCache = new SimpleCache<TafData[]>(300000); // 5분
+    this.metarCache = new SimpleCache<InternalMetarData[]>(30000); // 30초
+    this.tafCache = new SimpleCache<InternalTafData[]>(300000); // 5분
     this.sigmetCache = new SimpleCache<SigmetData[]>(60000); // 1분
-    this.upperWindCache = new SimpleCache<UpperWindData>(1800000); // 30분
+    this.upperWindCache = new SimpleCache<InternalUpperWindData>(1800000); // 30분
     this.radarCache = new SimpleCache<RadarApiResponse>(60000); // 1분
     this.satelliteCache = new SimpleCache<SatelliteApiResponse>(300000); // 5분
     this.lightningCache = new SimpleCache<LightningApiResponse>(30000); // 30초
@@ -178,7 +239,7 @@ export class WeatherApiClient extends BaseApiClient {
   /**
    * METAR 데이터 조회
    */
-  async fetchMetar(icao?: string): Promise<MetarData[]> {
+  async fetchMetar(icao?: string): Promise<InternalMetarData[]> {
     const cacheKey = `metar-${icao || 'default'}`;
     const cached = this.metarCache.get(cacheKey);
     if (cached) return cached;
@@ -196,7 +257,7 @@ export class WeatherApiClient extends BaseApiClient {
   /**
    * TAF 데이터 조회
    */
-  async fetchTaf(icao?: string): Promise<TafData[]> {
+  async fetchTaf(icao?: string): Promise<InternalTafData[]> {
     const cacheKey = `taf-${icao || 'default'}`;
     const cached = this.tafCache.get(cacheKey);
     if (cached) return cached;
@@ -251,7 +312,7 @@ export class WeatherApiClient extends BaseApiClient {
   /**
    * 상층풍 데이터 조회
    */
-  async fetchUpperWind(): Promise<UpperWindData> {
+  async fetchUpperWind(): Promise<InternalUpperWindData> {
     const cacheKey = 'upperwind';
     const cached = this.upperWindCache.get(cacheKey);
     if (cached) return cached;
@@ -339,9 +400,9 @@ export class WeatherApiClient extends BaseApiClient {
   }
 
   /**
-   * API 응답을 MetarData로 변환
+   * API 응답을 InternalMetarData로 변환
    */
-  private mapToMetarData(response: MetarApiResponse[]): MetarData[] {
+  private mapToMetarData(response: MetarApiResponse[]): InternalMetarData[] {
     return response.map((item) => ({
       icao: item.icaoId,
       obsTime: new Date(item.obsTime),
@@ -357,7 +418,7 @@ export class WeatherApiClient extends BaseApiClient {
       ceiling: item.ceiling ?? undefined,
       ceilingMeters: item.ceilingM ?? undefined,
       flightCategory: item.fltCat as 'VFR' | 'MVFR' | 'IFR' | 'LIFR',
-      rawOb: item.rawOb,
+      rawMetar: item.rawOb,
       source: item.source,
       leftVisibility: item.lVis ?? undefined,
       rightVisibility: item.rVis ?? undefined,
@@ -367,12 +428,12 @@ export class WeatherApiClient extends BaseApiClient {
   }
 
   /**
-   * API 응답을 TafData로 변환
+   * API 응답을 InternalTafData로 변환
    */
   private mapToTafData(
     response: TafApiResponse[],
     filterIcao?: string
-  ): TafData[] {
+  ): InternalTafData[] {
     return response
       .filter((item) => !filterIcao || item.icaoId === filterIcao)
       .map((item) => ({
@@ -442,11 +503,11 @@ export class WeatherApiClient extends BaseApiClient {
   }
 
   /**
-   * API 응답을 UpperWindData로 변환
+   * API 응답을 InternalUpperWindData로 변환
    */
-  private mapToUpperWindData(response: UpperWindApiResponse): UpperWindData {
+  private mapToUpperWindData(response: UpperWindApiResponse): InternalUpperWindData {
     return {
-      time: new Date(response.time),
+      time: response.time,
       grid: response.grid.map((point) => ({
         lat: point.lat,
         lon: point.lon,
@@ -460,7 +521,7 @@ export class WeatherApiClient extends BaseApiClient {
               windSpeed: data.wind_spd_kt,
             },
           }),
-          {}
+          {} as Record<string, { altitude_m: number; windDirection: number; windSpeed: number }>
         ),
       })),
       source: response.source,

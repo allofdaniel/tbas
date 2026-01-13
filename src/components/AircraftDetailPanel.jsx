@@ -103,32 +103,52 @@ const RouteSection = ({ displayAircraft, flightSchedule, flightScheduleLoading, 
  * 실제 비행 데이터 기반으로 이륙 시간과 예상 착륙 시간 계산
  */
 const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, aircraftHex, displayAircraft, AIRPORT_DATABASE }) => {
-  // 실제 비행 데이터에서 이륙 시간 추출
+  // 실제 비행 데이터에서 이륙 시간 추출 (AltitudeGraphSection과 동일한 로직)
   const getActualTakeoffTime = () => {
-    const trackPath = flightTrack?.path || [];
-    const realtimeTrail = aircraftTrails?.[aircraftHex] || [];
+    const historicalData = flightTrack?.path || [];
+    const realtimeData = aircraftTrails?.[aircraftHex] || [];
 
-    let allData = [];
-    if (trackPath.length > 0) {
-      allData = trackPath.map(p => ({
-        timestamp: p.time ? p.time * 1000 : p.timestamp,
-        altitude_ft: p.altitude_ft
-      }));
-    }
-    if (realtimeTrail.length > 0 && allData.length === 0) {
-      allData = realtimeTrail.map(p => ({
-        timestamp: p.timestamp,
-        altitude_ft: p.altitude_ft
-      }));
+    let trackData = [];
+
+    // Merge historical and realtime data (same logic as AltitudeGraphSection)
+    if (historicalData.length > 0 && realtimeData.length > 0) {
+      const lastHistorical = historicalData[historicalData.length - 1];
+      const lastHistTime = lastHistorical.time ? lastHistorical.time * 1000 : lastHistorical.timestamp || 0;
+
+      const newerRealtimeData = realtimeData.filter(rt => {
+        const rtTime = rt.timestamp || 0;
+        return rtTime > lastHistTime;
+      });
+
+      trackData = [...historicalData, ...newerRealtimeData];
+    } else if (historicalData.length > 0) {
+      trackData = historicalData;
+    } else {
+      trackData = realtimeData;
     }
 
-    // 이륙 포인트 찾기 (고도가 처음으로 100ft 이상인 시점)
-    for (let i = 0; i < allData.length; i++) {
-      if (allData[i].altitude_ft > 100) {
-        return allData[i].timestamp;
+    // Filter out ground data (on_ground=true or altitude < 100ft at start)
+    let startIdx = 0;
+    for (let i = 0; i < Math.min(trackData.length, 20); i++) {
+      const pt = trackData[i];
+      const altFt = pt.altitude_ft !== undefined ? pt.altitude_ft : (pt.altitude_m ? pt.altitude_m * 3.28084 : 0);
+      if (pt.on_ground === true || altFt < 100) {
+        startIdx = i + 1;
+      } else {
+        break;
       }
     }
-    return allData[0]?.timestamp || null;
+    if (startIdx > 0 && startIdx < trackData.length) {
+      trackData = trackData.slice(startIdx);
+    }
+
+    // Return first valid airborne point's timestamp
+    if (trackData.length > 0) {
+      const firstPoint = trackData[0];
+      const timestamp = firstPoint.time ? firstPoint.time * 1000 : firstPoint.timestamp;
+      return timestamp || null;
+    }
+    return null;
   };
 
   // 도착 공항까지 거리 계산 (NM)

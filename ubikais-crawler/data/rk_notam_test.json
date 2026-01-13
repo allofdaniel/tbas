@@ -1,0 +1,42 @@
+{
+  "status": "success",
+  "result": "",
+  "msg": "",
+  "records": [
+    {
+      "id": 17873720,
+      "ntmPk": 17873720,
+      "ntSendDate": "20260101",
+      "ntPri": "GG",
+      "ntDate": "010001",
+      "sndAftn": "RKRRYNYX",
+      "ntYear": "26",
+      "ntSndSeq": "0001",
+      "ntSeries": "C",
+      "ntStatus": "R",
+      "ntFir": "RKRR",
+      "ntCode": "QKKKK",
+      "ntCodeDesc": null,
+      "ntTraf": null,
+      "ntPurpose": null,
+      "ntScope": null,
+      "ntLower": "000",
+      "ntUpper": "999",
+      "ntCoord": "3535N12700E999",
+      "ntAd": "RKRR",
+      "apUs": null,
+      "ntStartDate": "2601010000",
+      "ntEndDate": "2602011500",
+      "ntPerm": "EST",
+      "ntSch": null,
+      "ntText": "CHECKLIST\r\nYEAR=2025 2101 2153 2154 2187 2221 2249 2263 2284 2289 2326 2331\r\n2372 2376 2378 2379 2385 2408 2412 2414 2415 2416 2419 2420 2421\r\n2422 2423\r\n\r\nLATEST PUBLICATIONS\r\nAIRAC AIP AMDT : 13/25 EFFECTIVE 1600 UTC 21 JAN 2026\r\nAIRAC AIP SUP : 108/25 EFFECTIVE 1600 UTC 24 DEC 2025\r\nAIP AMDT : 13/25\r\nAIP SUP : 112/25\r\nAIC : 9/25\r\n\r\nCHECKLIST OF SUP AND AIC\r\nAIRAC AIP SUP : 2/23 43/25 58/25 63/25 85/25 86/25 87/25 94/25 95/25\r\n96/25 97/25 98/25 99/25 102/25 103/25 104/25 105/25 106/25 107/25\r\n108/25\r\nAIP SUP : 23/10 27/24 40/24 50/24 68/24 76/24 80/24  8/25 18/25\r\n37/25 42/25 49/25 60/25 66/25 67/25 80/25 81/25 82/25 83/25 88/25\r\n89/25 90/25 91/25 92/25 100/25 101/25\r\nAIC : 5/21 7/21 1/25 2/25 3/25 6/25 8/25 9/25",
+      "ntLowerLim": null,
+      "ntUpperLim": null,
+      "amsOriginal": "CVA0030\r\nGG RKZZNAXX RKDAYXYX\r\n010001 RKRRYNYX\r\n (C0001/26 NOTAMR C2248/25 \r\nQ)RKRR/QKKKK/K/K/K/000/999/3535N12700E999\r\nA)RKRR B)2601010000 C)2602011500EST\r\nE)CHECKLIST\r\nYEAR=2025 2101 2153 2154 2187 2221 2249 2263 2284 2289 2326 2331\r\n2372 2376 2378 2379 2385 2408 2412 2414 2415 2416 2419 2420 2421\r\n2422 2423\r\n\r\nLATEST PUBLICATIONS\r\nAIRAC AIP AMDT : 13/25 EFFECTIVE 1600 UTC 21 JAN 2026\r\nAIRAC AIP SUP : 108/25 EFFECTIVE 1600 UTC 24 DEC 2025\r\nAIP AMDT : 13/25\r\nAIP SUP : 112/25\r\nAIC : 9/25\r\n\r\nCHECKLIST OF SUP AND AIC\r\nAIRAC AIP SUP : 2/23 43/25 58/25 63/25 85/25 86/25 87/25 94/25 95/25\r\n96/25 97/25 98/25 99/25 102/25 103/25 104/25 105/25 106/25 107/25\r\n108/25\r\nAIP SUP : 23/10 27/24 40/24 50/24 68/24 76/24 80/24  8/25 18/25\r\n37/25 42/25 49/25 60/25 66/25 67/25 80/25 81/25 82/25 83/25 88/25\r\n89/25 90/25 91/25 92/25 100/25 101/25\r\nAIC : 5/21 7/21 1/25 2/25 3/25 6/25 8/25 9/25)",
+      "remark": null
+    }
+  ],
+  "summary": null,
+  "total": 1,
+  "fplPk": 0
+}

@@ -5,7 +5,7 @@
  * 선택된 항공기 상세 정보 패널
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { AircraftPosition } from '@/types';
 import { getAircraftRepository } from '@/infrastructure/repositories/AircraftRepository';
 import { ICAO_TO_IATA } from '@/config/constants';
@@ -203,7 +203,7 @@ export function AircraftInfoPanel({
           <InfoRow
             label="Vertical Rate"
             value={formatVerticalRate(aircraft.baro_rate)}
-            highlight={aircraft.baro_rate && Math.abs(aircraft.baro_rate) > 1000}
+            highlight={aircraft.baro_rate !== undefined && aircraft.baro_rate !== 0 && Math.abs(aircraft.baro_rate) > 1000}
           />
         </div>
       </div>

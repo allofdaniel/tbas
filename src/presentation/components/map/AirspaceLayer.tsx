@@ -5,7 +5,7 @@
  * 공역 폴리곤 표시 레이어
  */
 
-import React, { useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { useMapContext } from '../../contexts/MapContext';
 import type { Airspace } from '@/types';
@@ -58,14 +58,15 @@ export function AirspaceLayer({
           .filter((as) => as.polygon && as.polygon.length >= 3)
           .map((as) => {
             const colors = AIRSPACE_COLORS[as.type] || AIRSPACE_COLORS.default;
+            const polygon = as.polygon!;
             return {
               type: 'Feature',
               geometry: {
                 type: 'Polygon',
                 coordinates: [
                   [
-                    ...as.polygon.map((p) => [p.lon, p.lat]),
-                    [as.polygon[0].lon, as.polygon[0].lat], // Close the polygon
+                    ...polygon.map((p) => [p.lon, p.lat]),
+                    [polygon[0].lon, polygon[0].lat], // Close the polygon
                   ],
                 ],
               },

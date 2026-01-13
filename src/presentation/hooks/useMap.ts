@@ -5,7 +5,7 @@
  * Mapbox GL 지도 관리를 위한 React Hook
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { Coordinate } from '@/types';
 import {
   DEFAULT_MAP_CENTER,
@@ -173,7 +173,7 @@ export function useMap(options: UseMapOptions = {}): UseMapReturn {
 
     const styleSpec = MAP_STYLES[style];
     mapRef.current.setStyle(
-      typeof styleSpec === 'string' ? styleSpec : (styleSpec as mapboxgl.Style)
+      typeof styleSpec === 'string' ? styleSpec : (JSON.parse(JSON.stringify(styleSpec)) as mapboxgl.Style)
     );
     setMapStyleState(style);
   }, []);
@@ -238,6 +238,8 @@ export function useMap(options: UseMapOptions = {}): UseMapReturn {
     if (!mapRef.current) return null;
 
     const bounds = mapRef.current.getBounds();
+    if (!bounds) return null;
+
     return {
       ne: { lat: bounds.getNorthEast().lat, lon: bounds.getNorthEast().lng },
       sw: { lat: bounds.getSouthWest().lat, lon: bounds.getSouthWest().lng },

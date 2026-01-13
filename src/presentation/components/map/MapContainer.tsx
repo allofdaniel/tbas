@@ -5,16 +5,12 @@
  * Mapbox GL 지도 컨테이너 컴포넌트
  */
 
-import React, { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useMapContext } from '../../contexts/MapContext';
 import {
   MAPBOX_ACCESS_TOKEN,
-  DEFAULT_MAP_CENTER,
-  DEFAULT_MAP_ZOOM,
-  DEFAULT_MAP_PITCH,
-  DEFAULT_MAP_BEARING,
   MAP_STYLES,
 } from '@/config/constants';
 
@@ -48,7 +44,7 @@ export function MapContainer({
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: typeof styleSpec === 'string' ? styleSpec : (styleSpec as mapboxgl.Style),
+      style: typeof styleSpec === 'string' ? styleSpec : (JSON.parse(JSON.stringify(styleSpec)) as mapboxgl.Style),
       center: [viewState.center.lon, viewState.center.lat],
       zoom: viewState.zoom,
       pitch: viewState.pitch,
@@ -118,7 +114,7 @@ export function MapContainer({
 
     const styleSpec = MAP_STYLES[mapStyle];
     mapRef.current.setStyle(
-      typeof styleSpec === 'string' ? styleSpec : (styleSpec as mapboxgl.Style)
+      typeof styleSpec === 'string' ? styleSpec : (JSON.parse(JSON.stringify(styleSpec)) as mapboxgl.Style)
     );
   }, [mapStyle]);
 
@@ -129,7 +125,11 @@ export function MapContainer({
       style={{
         width: '100%',
         height: '100%',
-        position: 'relative',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         ...style,
       }}
     >

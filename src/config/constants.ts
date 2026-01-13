@@ -17,7 +17,7 @@ export const IS_DEVELOPMENT = import.meta.env.DEV;
 // ============================================
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'https://rkpu-viewer.vercel.app';
+  import.meta.env.VITE_API_BASE_URL || 'https://tbas.vercel.app';
 
 export const MAPBOX_ACCESS_TOKEN =
   import.meta.env.VITE_MAPBOX_ACCESS_TOKEN ||

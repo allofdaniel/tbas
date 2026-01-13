@@ -5,7 +5,7 @@
  * 항공기 목록 패널
  */
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import type { AircraftPosition } from '@/types';
 import { FLIGHT_PHASE_COLORS } from '@/config/constants';
 

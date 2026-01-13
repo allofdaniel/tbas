@@ -100,6 +100,11 @@ export interface IWeatherRepository {
   fetchSigmet(): Promise<SigmetData[]>;
 
   /**
+   * AIRMET 데이터 조회
+   */
+  fetchAirmet(): Promise<SigmetData[]>;
+
+  /**
    * 상층풍 데이터 조회
    */
   fetchUpperWind(): Promise<UpperWindData | null>;
@@ -138,6 +143,10 @@ export class NullWeatherRepository implements IWeatherRepository {
   }
 
   async fetchSigmet(): Promise<SigmetData[]> {
+    return [];
+  }
+
+  async fetchAirmet(): Promise<SigmetData[]> {
     return [];
   }
 

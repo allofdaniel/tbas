@@ -1,5 +1,6 @@
 /**
- * RKPU-Viewer 공통 타입 정의
+ * TBAS (Trajectory-Based Awareness System) 공통 타입 정의
+ * 궤적기반 상황인식 시스템
  * DO-278A AL4 요구사항 추적: SRS-TYPE-001
  */
 
@@ -54,14 +55,31 @@ export interface AircraftPosition {
   track?: number; // degrees
   vertical_rate?: number; // ft/min
   baro_rate?: number; // barometric rate ft/min
+  geom_rate?: number; // geometric rate ft/min
   on_ground?: boolean;
   timestamp?: number;
   seen?: number;
   seen_pos?: number;
+  rssi?: number;
+  messages?: number;
   category?: AircraftCategory;
   flight?: string;
   r?: string; // registration
+  registration?: string; // alias for r
   t?: string; // aircraft type
+  aircraft_type?: string; // alias for t
+  description?: string;
+  owner_operator?: string;
+  year_built?: number;
+  squawk?: string;
+  emergency?: string;
+  nav_qnh?: number;
+  nav_altitude_mcp?: number;
+  distance?: number; // distance from center in NM
+  flightPhase?: FlightPhase;
+  true_airspeed?: number;
+  indicated_airspeed?: number;
+  mach?: number;
 }
 
 export interface AircraftDetails {
@@ -158,11 +176,11 @@ export interface CloudLayer {
 
 export interface SigmetData {
   id?: string;
-  type: 'SIGMET' | 'TURBULENCE' | 'ICING' | 'THUNDERSTORM' | 'VOLCANIC_ASH' | 'SEVERE_TURBULENCE' | 'OTHER';
+  type: 'SIGMET' | 'AIRMET' | 'TURBULENCE' | 'ICING' | 'THUNDERSTORM' | 'VOLCANIC_ASH' | 'SEVERE_TURBULENCE' | 'OTHER';
   hazard?: string;
   raw: string;
-  validFrom?: string;
-  validTo?: string;
+  validFrom?: string | Date;
+  validTo?: string | Date;
   coords?: Coordinate[];
   polygon?: Coordinate[];
 }
@@ -230,6 +248,7 @@ export interface Airspace {
   name: string;
   type: AirspaceType;
   category?: string;
+  class?: string; // airspace classification (A, B, C, D, E, F, G)
   floorFt?: number;
   ceilingFt?: number;
   lowerLimit?: number; // alias for floorFt

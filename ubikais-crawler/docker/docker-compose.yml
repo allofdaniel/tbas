@@ -1,0 +1,22 @@
+services:
+  aviation-crawler:
+    build: .
+    container_name: aviation-crawler
+    restart: unless-stopped
+    environment:
+      - UBIKAIS_USERNAME=allofdanie
+      - UBIKAIS_PASSWORD=pr12pr34!!
+      - OUTPUT_DIR=/data
+      - CRAWL_INTERVAL=3600
+      - TZ=Asia/Seoul
+      # 인천공항 API 키 (옵션)
+      - DATA_GO_KR_API_KEY=${DATA_GO_KR_API_KEY:-}
+    volumes:
+      - ./data:/data
+    # Playwright를 위한 추가 설정
+    shm_size: '2gb'
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined

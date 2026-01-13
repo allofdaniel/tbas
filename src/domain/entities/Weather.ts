@@ -146,6 +146,7 @@ export function parseVisibility(visibM: number): string {
 export function getSigmetTypeColor(type: SigmetData['type']): string {
   const colors: Record<SigmetData['type'], string> = {
     SIGMET: '#FF5722',
+    AIRMET: '#FFA726',
     TURBULENCE: '#FF9800',
     SEVERE_TURBULENCE: '#E65100',
     ICING: '#00BCD4',
@@ -162,6 +163,7 @@ export function getSigmetTypeColor(type: SigmetData['type']): string {
 export function getSigmetTypeLabel(type: SigmetData['type']): string {
   const labels: Record<SigmetData['type'], string> = {
     SIGMET: '시그멧',
+    AIRMET: '에어멧',
     TURBULENCE: '난류',
     SEVERE_TURBULENCE: '심한 난류',
     ICING: '착빙',

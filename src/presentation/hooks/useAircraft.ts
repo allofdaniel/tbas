@@ -70,7 +70,7 @@ export function useAircraft(options: UseAircraftOptions): UseAircraftReturn {
       setIsLoading(true);
       setError(null);
 
-      const positions = await repositoryRef.current.fetchNearby(center, radiusNM);
+      const positions = await repositoryRef.current.fetchNearby({ center, radiusNM });
 
       // 비행 단계 감지 추가
       const enrichedPositions = positions.map((ac) => ({

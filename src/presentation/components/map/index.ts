@@ -8,3 +8,4 @@ export * from './AircraftLayer';
 export * from './TrailLayer';
 export * from './WaypointLayer';
 export * from './AirspaceLayer';
+export * from './ChartLayer';

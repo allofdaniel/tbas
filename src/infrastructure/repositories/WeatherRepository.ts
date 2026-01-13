@@ -5,13 +5,18 @@
  * IWeatherRepository 인터페이스 구현
  */
 
-import type { IWeatherRepository } from '@/domain/repositories/IWeatherRepository';
+import type {
+  IWeatherRepository,
+  RadarData,
+  SatelliteData,
+  LlwsData,
+  UpperWindData as RepoUpperWindData,
+} from '@/domain/repositories/IWeatherRepository';
 import type {
   MetarData,
   TafData,
   SigmetData,
-  UpperWindData,
-  Coordinate,
+  LightningStrike,
 } from '@/types';
 import {
   WeatherApiClient,
@@ -31,15 +36,41 @@ export class WeatherRepository implements IWeatherRepository {
   /**
    * METAR 데이터 조회
    */
-  async fetchMetar(icao?: string): Promise<MetarData[]> {
-    return this.apiClient.fetchMetar(icao);
+  async fetchMetar(icao: string): Promise<MetarData | null> {
+    const metars = await this.apiClient.fetchMetar(icao);
+    if (!metars || metars.length === 0) return null;
+
+    // API 응답을 MetarData로 변환
+    const metar = metars[0];
+    return {
+      icaoId: metar.icao || icao,
+      obsTime: metar.obsTime || new Date().toISOString(),
+      temp: metar.temp,
+      dewp: metar.dewpoint,
+      wdir: metar.windDirection,
+      wspd: metar.windSpeed,
+      visib: metar.visibility,
+      ceiling: metar.ceiling,
+      fltCat: this.determineFlightCategory(metar),
+      rawOb: metar.rawMetar,
+    };
   }
 
   /**
    * TAF 데이터 조회
    */
-  async fetchTaf(icao?: string): Promise<TafData[]> {
-    return this.apiClient.fetchTaf(icao);
+  async fetchTaf(icao: string): Promise<TafData | null> {
+    const tafs = await this.apiClient.fetchTaf(icao);
+    if (!tafs || tafs.length === 0) return null;
+
+    const taf = tafs[0];
+    return {
+      icaoId: taf.icao || icao,
+      rawTAF: taf.rawTaf || '',
+      validTimeFrom: taf.validFrom?.toISOString() || new Date().toISOString(),
+      validTimeTo: taf.validTo?.toISOString() || new Date().toISOString(),
+      issueTime: taf.issueTime,
+    };
   }
 
   /**
@@ -59,79 +90,102 @@ export class WeatherRepository implements IWeatherRepository {
   /**
    * 상층풍 데이터 조회
    */
-  async fetchUpperWind(): Promise<UpperWindData> {
-    return this.apiClient.fetchUpperWind();
-  }
+  async fetchUpperWind(): Promise<RepoUpperWindData | null> {
+    const data = await this.apiClient.fetchUpperWind();
+    if (!data) return null;
 
-  /**
-   * LLWS 데이터 조회
-   */
-  async fetchLLWS(): Promise<
-    Array<{
-      station: string;
-      time: string;
-      runway: string;
-      type: string;
-      value: string | null;
-      raw: string;
-    }>
-  > {
-    return this.apiClient.fetchLLWS();
+    return {
+      time: data.time || new Date().toISOString(),
+      grid: (data.grid || []).map((point) => ({
+        lat: point.lat,
+        lon: point.lon,
+        name: point.name,
+        levels: Object.entries(point.levels).reduce(
+          (acc, [level, levelData]) => ({
+            ...acc,
+            [level]: {
+              altitude_m: levelData.altitude_m,
+              wind_dir: levelData.windDirection,
+              wind_spd_kt: levelData.windSpeed,
+            },
+          }),
+          {} as Record<string, { altitude_m: number; wind_dir: number; wind_spd_kt: number }>
+        ),
+      })),
+      source: data.source || 'Open-Meteo',
+    };
   }
 
   /**
    * 레이더 이미지 URL 조회
    */
-  async fetchRadar(): Promise<{
-    composite: string;
-    echoTop: string;
-    vil: string;
-    time: string;
-    bounds: number[][];
-  }> {
-    return this.apiClient.fetchRadar();
+  async fetchRadar(): Promise<RadarData | null> {
+    const data = await this.apiClient.fetchRadar();
+    if (!data) return null;
+
+    return {
+      composite: data.composite,
+      echoTop: data.echoTop,
+      vil: data.vil,
+      time: data.time,
+      bounds: data.bounds as [[number, number], [number, number]],
+    };
   }
 
   /**
    * 위성 이미지 URL 조회
    */
-  async fetchSatellite(): Promise<{
-    vis: string;
-    ir: string;
-    wv: string;
-    enhir: string;
-    time: string;
-    bounds: number[][];
-  }> {
-    return this.apiClient.fetchSatellite();
+  async fetchSatellite(): Promise<SatelliteData | null> {
+    const data = await this.apiClient.fetchSatellite();
+    if (!data) return null;
+
+    return {
+      vis: data.vis,
+      ir: data.ir,
+      wv: data.wv,
+      enhir: data.enhir,
+      time: data.time,
+      bounds: data.bounds as [[number, number], [number, number]],
+    };
   }
 
   /**
    * 낙뢰 데이터 조회
    */
-  async fetchLightning(): Promise<{
-    strikes: Array<{
-      time: string;
-      lat: number;
-      lon: number;
-      amplitude: number | null;
-      type: string;
-    }>;
-    timeRange: { start: string; end: string };
-  }> {
-    return this.apiClient.fetchLightning();
+  async fetchLightning(): Promise<LightningStrike[]> {
+    const data = await this.apiClient.fetchLightning();
+    if (!data?.strikes) return [];
+
+    return data.strikes.map((s) => ({
+      lat: s.lat,
+      lon: s.lon,
+      time: s.time,
+      amplitude: s.amplitude ?? undefined,
+      type: s.type as 'CG' | 'IC' | undefined,
+    }));
   }
 
   /**
-   * SIGWX 차트 URL 조회
+   * LLWS 데이터 조회
    */
-  async fetchSigwx(): Promise<{
-    low: string;
-    mid: string;
-    high: string;
-    intl: string;
-  }> {
-    return this.apiClient.fetchSigwx();
+  async fetchLlws(): Promise<LlwsData[]> {
+    return this.apiClient.fetchLLWS();
+  }
+
+  /**
+   * 비행 카테고리 결정 헬퍼
+   */
+  private determineFlightCategory(metar: {
+    visibility?: number;
+    ceiling?: number;
+  }): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' {
+    const vis = metar.visibility ?? 10;
+    const ceil = metar.ceiling ?? 10000;
+
+    if (vis < 1 || ceil < 500) return 'LIFR';
+    if (vis < 3 || ceil < 1000) return 'IFR';
+    if (vis < 5 || ceil < 3000) return 'MVFR';
+    return 'VFR';
   }
 
   /**

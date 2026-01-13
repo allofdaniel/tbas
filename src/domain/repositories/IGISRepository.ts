@@ -5,7 +5,7 @@
  * GIS 데이터 접근을 위한 추상화 인터페이스
  */
 
-import type { Waypoint, Route, Airspace, FlightProcedure, Airport, Notam } from '@/types';
+import type { Waypoint, Route, Airspace, FlightProcedure, Airport, Notam, Navaid } from '@/types';
 
 /**
  * ATC 섹터 데이터
@@ -23,7 +23,9 @@ export interface AtcSectorData {
 export interface AviationData {
   airport: Airport;
   waypoints: Waypoint[];
-  navaids: Waypoint[];
+  routes?: Route[];
+  airspaces?: Airspace[];
+  navaids: Navaid[];
   obstacles: ObstacleData[];
   procedures: {
     SID: Record<string, FlightProcedure>;
@@ -58,7 +60,7 @@ export interface KoreaAirspaceData {
   waypoints: Waypoint[];
   routes: Route[];
   airspaces: Airspace[];
-  navaids: Waypoint[];
+  navaids: Navaid[];
 }
 
 /**

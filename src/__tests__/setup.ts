@@ -115,3 +115,13 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: vi.fn(),
   })),
 });
+
+// Mock IndexedDB
+const mockIDBKeyRange = {
+  bound: vi.fn((lower, upper) => ({ lower, upper, lowerOpen: false, upperOpen: false })),
+  lowerBound: vi.fn((lower) => ({ lower, upper: undefined, lowerOpen: false })),
+  upperBound: vi.fn((upper) => ({ lower: undefined, upper, upperOpen: false })),
+  only: vi.fn((value) => ({ lower: value, upper: value })),
+};
+
+global.IDBKeyRange = mockIDBKeyRange as unknown as typeof IDBKeyRange;

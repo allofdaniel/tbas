@@ -47,6 +47,10 @@ export default defineConfig({
         target: 'https://rkpu-viewer.vercel.app',
         changeOrigin: true,
       },
+      '/api/charts': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
   build: {

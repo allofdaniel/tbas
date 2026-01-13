@@ -394,8 +394,8 @@ export class GISApiClient extends BaseApiClient {
       name: r.name,
       type: (r.type as Route['type']) || 'OTHER',
       points: r.waypoints.map((w) => ({
-        ident: w.id || w.name,
-        name: w.name || w.id,
+        ident: w.id || w.name || 'UNKNOWN',
+        name: w.name || w.id || 'UNKNOWN',
         type: 'waypoint' as const,
         lat: w.lat,
         lon: w.lon,
@@ -461,7 +461,7 @@ export class GISApiClient extends BaseApiClient {
       navaidType: (n.type as Navaid['navaidType']) || 'VOR',
       lat: n.lat,
       lon: n.lon,
-      frequency: n.freq,
+      frequency: n.freq !== undefined ? String(n.freq) : undefined,
     }));
   }
 

@@ -5,7 +5,7 @@
  * 항공기 항적 표시 레이어
  */
 
-import React, { useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { useMapContext } from '../../contexts/MapContext';
 import { useAircraftContext } from '../../contexts/AircraftContext';
