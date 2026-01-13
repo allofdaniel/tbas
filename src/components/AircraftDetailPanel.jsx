@@ -100,24 +100,76 @@ const RouteSection = ({ displayAircraft, flightSchedule, flightScheduleLoading, 
 
 /**
  * Takeoff/Landing Time Section
+ * flightTrack의 첫 포인트 시간을 실제 이륙 시간으로 우선 사용
  */
-const TakeoffLandingSection = ({ flightSchedule }) => {
-  if (!(flightSchedule?.schedule?.atd || flightSchedule?.schedule?.std || flightSchedule?.departure?.actual)) {
+const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, aircraftHex }) => {
+  // 실제 비행 데이터에서 이륙 시간 추출 (가장 신뢰할 수 있음)
+  const getActualTakeoffTime = () => {
+    // flightTrack (OpenSky) 데이터의 첫 포인트
+    const trackPath = flightTrack?.path || [];
+    const realtimeTrail = aircraftTrails?.[aircraftHex] || [];
+
+    // 데이터 합치기
+    let allData = [];
+    if (trackPath.length > 0) {
+      allData = trackPath.map(p => ({
+        timestamp: p.time ? p.time * 1000 : p.timestamp,
+        altitude_ft: p.altitude_ft
+      }));
+    }
+    if (realtimeTrail.length > 0 && allData.length === 0) {
+      allData = realtimeTrail.map(p => ({
+        timestamp: p.timestamp,
+        altitude_ft: p.altitude_ft
+      }));
+    }
+
+    // 이륙 포인트 찾기 (고도가 처음으로 상승하는 시점)
+    for (let i = 0; i < allData.length; i++) {
+      if (allData[i].altitude_ft > 100) { // 100ft 이상에서 첫 포인트
+        return allData[i].timestamp;
+      }
+    }
+    return allData[0]?.timestamp || null;
+  };
+
+  const actualTakeoffTime = getActualTakeoffTime();
+
+  // 스케줄 시간이 현재와 너무 다르면 (6시간 이상) 신뢰하지 않음
+  const isScheduleReliable = () => {
+    if (!flightSchedule?.schedule?.atd) return false;
+    // atd가 "오전 11:41" 같은 문자열이면 파싱
+    const atdStr = flightSchedule.schedule.atd;
+    if (!atdStr) return false;
+
+    // 현재 비행 데이터의 시작 시간과 비교
+    if (actualTakeoffTime) {
+      // 스케줄의 atd를 파싱해서 비교 (간단히 6시간 차이 체크는 어려움)
+      // 대신 actualTakeoffTime이 있으면 그걸 우선 사용
+      return false;
+    }
+    return true;
+  };
+
+  if (!actualTakeoffTime && !(flightSchedule?.schedule?.atd || flightSchedule?.schedule?.std || flightSchedule?.departure?.actual)) {
     return null;
   }
+
+  // 이륙 시간: 실제 비행 데이터 우선, 없으면 스케줄
+  const takeoffTime = actualTakeoffTime
+    ? new Date(actualTakeoffTime).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})
+    : (flightSchedule?.schedule?.atd ||
+       (flightSchedule?.departure?.actual ? new Date(flightSchedule.departure.actual).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null) ||
+       flightSchedule?.schedule?.etd ||
+       flightSchedule?.schedule?.std ||
+       (flightSchedule?.departure?.scheduled ? new Date(flightSchedule.departure.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : '--:--'));
 
   return (
     <div className="takeoff-landing-section">
       <div className="takeoff-landing-grid">
-        <div className={`tl-item takeoff ${flightSchedule?.schedule?.atd || flightSchedule?.departure?.actual ? '' : 'estimated'}`}>
+        <div className={`tl-item takeoff ${actualTakeoffTime || flightSchedule?.schedule?.atd || flightSchedule?.departure?.actual ? '' : 'estimated'}`}>
           <span className="tl-label">이륙</span>
-          <span className="tl-time">
-            {flightSchedule?.schedule?.atd ||
-             (flightSchedule?.departure?.actual ? new Date(flightSchedule.departure.actual).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null) ||
-             flightSchedule?.schedule?.etd ||
-             flightSchedule?.schedule?.std ||
-             (flightSchedule?.departure?.scheduled ? new Date(flightSchedule.departure.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : '--:--')}
-          </span>
+          <span className="tl-time">{takeoffTime}</span>
         </div>
         <div className={`tl-item landing ${flightSchedule?.arrival?.actual ? '' : 'estimated'}`}>
           <span className="tl-label">착륙</span>
@@ -396,6 +448,9 @@ const ScheduleSection = ({
             </div>
             {flightSchedule.schedule && (
               <>
+                <div className="schedule-item full-width schedule-note">
+                  <span className="schedule-hint">출발: {flightSchedule.departure?.iata || flightSchedule.departure?.icao} 현지시각 / 도착: {flightSchedule.arrival?.iata || flightSchedule.arrival?.icao} 현지시각</span>
+                </div>
                 <div className="schedule-item">
                   <span className="schedule-label">계획 출발</span>
                   <span className="schedule-value">{flightSchedule.schedule.std || '-'}</span>
@@ -462,7 +517,47 @@ const AltitudeGraphSection = ({
   graphHoverData,
   setGraphHoverData
 }) => {
-  const trackData = flightTrack?.path || aircraftTrails[displayAircraft.hex] || [];
+  // Merge historical data (flightTrack) with real-time data (aircraftTrails)
+  // aircraftTrails has more recent data, so we append it to fill the gap
+  const historicalData = flightTrack?.path || [];
+  const realtimeData = aircraftTrails[displayAircraft.hex] || [];
+
+  let trackData = [];
+
+  if (historicalData.length > 0 && realtimeData.length > 0) {
+    // Get the last timestamp from historical data
+    const lastHistorical = historicalData[historicalData.length - 1];
+    const lastHistTime = lastHistorical.time ? lastHistorical.time * 1000 : lastHistorical.timestamp || 0;
+
+    // Filter realtime data that's newer than historical data
+    const newerRealtimeData = realtimeData.filter(rt => {
+      const rtTime = rt.timestamp || 0;
+      return rtTime > lastHistTime;
+    });
+
+    // Merge: historical + newer realtime data
+    trackData = [...historicalData, ...newerRealtimeData];
+  } else if (historicalData.length > 0) {
+    trackData = historicalData;
+  } else {
+    trackData = realtimeData;
+  }
+
+  // Filter out ground data (on_ground=true or altitude=0 at start)
+  // Simple approach: just skip initial points where aircraft is on ground
+  let startIdx = 0;
+  for (let i = 0; i < Math.min(trackData.length, 20); i++) {
+    const pt = trackData[i];
+    // Skip if explicitly on ground or altitude is 0/very low (< 100ft)
+    if (pt.on_ground === true || (pt.altitude_ft !== undefined && pt.altitude_ft < 100)) {
+      startIdx = i + 1;
+    } else {
+      break;
+    }
+  }
+  if (startIdx > 0 && startIdx < trackData.length) {
+    trackData = trackData.slice(startIdx);
+  }
 
   if (trackData.length < 4) return null;
 
@@ -546,12 +641,32 @@ const AltitudeGraphSection = ({
     const validAltData = trackData.filter(t => typeof t.altitude_ft === 'number' && !isNaN(t.altitude_ft) && t.altitude_ft >= 0);
     if (validAltData.length < 2) return null;
     const fp = validAltData[0], lp = validAltData[validAltData.length - 1];
-    const startTime = fp.time ? new Date(fp.time * 1000).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : fp.timestamp ? new Date(fp.timestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null;
-    const endTime = lp.time ? new Date(lp.time * 1000).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : lp.timestamp ? new Date(lp.timestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null;
+
+    // Normalize timestamps to milliseconds
+    const fpTimestamp = fp.time ? fp.time * 1000 : fp.timestamp || 0;
+    const lpTimestamp = lp.time ? lp.time * 1000 : lp.timestamp || 0;
+
+    // Format start time
+    const startTime = fpTimestamp ? new Date(fpTimestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null;
+
+    // Check if the last point is recent (within 2 minutes) - show "현재" for real-time data
+    const isRecent = Date.now() - lpTimestamp < 120000; // 2 minutes
+    const endTime = isRecent ? '현재' : (lpTimestamp ? new Date(lpTimestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : '현재');
+
+    // Calculate flight duration
+    const durationMs = lpTimestamp - fpTimestamp;
+    const durationMins = Math.round(durationMs / 60000);
+    const durationHours = Math.floor(durationMins / 60);
+    const durationRemMins = durationMins % 60;
+    const durationStr = durationHours > 0
+      ? `${durationHours}시간 ${durationRemMins}분`
+      : `${durationMins}분`;
+
     const altChange = lp.altitude_ft - fp.altitude_ft;
+
     return (
       <div className="graph-summary">
-        <span className="flight-duration">{startTime || '--:--'} ~ {endTime || '현재'}</span>
+        <span className="flight-duration">{startTime || '--:--'} ~ {endTime} KST ({durationStr})</span>
         <span className={`alt-change ${altChange > 500 ? 'climbing' : altChange < -500 ? 'descending' : ''}`}>
           {fp.altitude_ft?.toLocaleString()}ft → {lp.altitude_ft?.toLocaleString()}ft ({altChange > 0 ? '+' : ''}{altChange?.toLocaleString()}ft)
         </span>
@@ -559,12 +674,20 @@ const AltitudeGraphSection = ({
     );
   };
 
+  // Determine data source label
+  const hasHistorical = historicalData.length > 0;
+  const hasRealtime = realtimeData.length > 0;
+  const trinoSource = flightTrack?.source === 'trino';
+  const sourceLabel = trinoSource
+    ? (hasRealtime ? ' (Trino + 실시간)' : ' (Trino 전체이력)')
+    : hasHistorical && hasRealtime ? ' (OpenSky + 실시간)' : hasHistorical ? ' (OpenSky)' : hasRealtime ? ' (실시간)' : '';
+
   return (
     <div className="aircraft-graph-section">
       <div className="section-title">
         비행 고도 그래프
         {flightTrackLoading && <span className="loading-dot">...</span>}
-        {flightTrack && <span className="graph-source"> (OpenSky)</span>}
+        <span className="graph-source">{sourceLabel}</span>
       </div>
       <div className="graph-container" style={{ position: "relative" }}>
         <svg
@@ -697,7 +820,12 @@ const AircraftDetailPanel = ({
           />
 
           {/* Takeoff/Landing Times */}
-          <TakeoffLandingSection flightSchedule={flightSchedule} />
+          <TakeoffLandingSection
+            flightSchedule={flightSchedule}
+            flightTrack={flightTrack}
+            aircraftTrails={aircraftTrails}
+            aircraftHex={displayAircraft.hex}
+          />
 
           {/* Flight Data */}
           <FlightDataSection displayAircraft={displayAircraft} />
