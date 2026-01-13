@@ -100,16 +100,14 @@ const RouteSection = ({ displayAircraft, flightSchedule, flightScheduleLoading, 
 
 /**
  * Takeoff/Landing Time Section
- * flightTrack의 첫 포인트 시간을 실제 이륙 시간으로 우선 사용
+ * 실제 비행 데이터 기반으로 이륙 시간과 예상 착륙 시간 계산
  */
-const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, aircraftHex }) => {
-  // 실제 비행 데이터에서 이륙 시간 추출 (가장 신뢰할 수 있음)
+const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, aircraftHex, displayAircraft, AIRPORT_DATABASE }) => {
+  // 실제 비행 데이터에서 이륙 시간 추출
   const getActualTakeoffTime = () => {
-    // flightTrack (OpenSky) 데이터의 첫 포인트
     const trackPath = flightTrack?.path || [];
     const realtimeTrail = aircraftTrails?.[aircraftHex] || [];
 
-    // 데이터 합치기
     let allData = [];
     if (trackPath.length > 0) {
       allData = trackPath.map(p => ({
@@ -124,63 +122,102 @@ const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, ai
       }));
     }
 
-    // 이륙 포인트 찾기 (고도가 처음으로 상승하는 시점)
+    // 이륙 포인트 찾기 (고도가 처음으로 100ft 이상인 시점)
     for (let i = 0; i < allData.length; i++) {
-      if (allData[i].altitude_ft > 100) { // 100ft 이상에서 첫 포인트
+      if (allData[i].altitude_ft > 100) {
         return allData[i].timestamp;
       }
     }
     return allData[0]?.timestamp || null;
   };
 
-  const actualTakeoffTime = getActualTakeoffTime();
+  // 도착 공항까지 거리 계산 (NM)
+  const getDistanceToDestination = () => {
+    const destIcao = flightSchedule?.arrival?.icao;
+    if (!destIcao || !AIRPORT_DATABASE?.[destIcao]) return null;
 
-  // 스케줄 시간이 현재와 너무 다르면 (6시간 이상) 신뢰하지 않음
-  const isScheduleReliable = () => {
-    if (!flightSchedule?.schedule?.atd) return false;
-    // atd가 "오전 11:41" 같은 문자열이면 파싱
-    const atdStr = flightSchedule.schedule.atd;
-    if (!atdStr) return false;
+    const dest = AIRPORT_DATABASE[destIcao];
+    const lat1 = displayAircraft?.lat;
+    const lon1 = displayAircraft?.lon;
+    const lat2 = dest.lat;
+    const lon2 = dest.lon;
 
-    // 현재 비행 데이터의 시작 시간과 비교
-    if (actualTakeoffTime) {
-      // 스케줄의 atd를 파싱해서 비교 (간단히 6시간 차이 체크는 어려움)
-      // 대신 actualTakeoffTime이 있으면 그걸 우선 사용
-      return false;
-    }
-    return true;
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+
+    // Haversine formula
+    const R = 3440.065; // Earth radius in NM
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   };
 
-  if (!actualTakeoffTime && !(flightSchedule?.schedule?.atd || flightSchedule?.schedule?.std || flightSchedule?.departure?.actual)) {
+  // 예상 착륙 시간 계산 (현재 위치 + 속도 기반)
+  const getEstimatedArrival = () => {
+    const distanceNM = getDistanceToDestination();
+    const groundSpeed = displayAircraft?.ground_speed;
+
+    if (!distanceNM || !groundSpeed || groundSpeed < 50) return null;
+
+    // 남은 비행 시간 (시간)
+    const hoursRemaining = distanceNM / groundSpeed;
+    // 착륙까지 약 15분 추가 (approach + landing)
+    const totalMinutes = hoursRemaining * 60 + 15;
+
+    const arrivalTime = new Date(Date.now() + totalMinutes * 60 * 1000);
+    return arrivalTime;
+  };
+
+  const actualTakeoffTime = getActualTakeoffTime();
+  const estimatedArrival = getEstimatedArrival();
+  const distanceToDestNM = getDistanceToDestination();
+
+  // 이륙 시간이나 착륙 예정이 없으면 표시 안 함
+  if (!actualTakeoffTime && !estimatedArrival) {
     return null;
   }
 
-  // 이륙 시간: 실제 비행 데이터 우선, 없으면 스케줄
-  const takeoffTime = actualTakeoffTime
+  const takeoffTimeStr = actualTakeoffTime
     ? new Date(actualTakeoffTime).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})
-    : (flightSchedule?.schedule?.atd ||
-       (flightSchedule?.departure?.actual ? new Date(flightSchedule.departure.actual).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null) ||
-       flightSchedule?.schedule?.etd ||
-       flightSchedule?.schedule?.std ||
-       (flightSchedule?.departure?.scheduled ? new Date(flightSchedule.departure.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : '--:--'));
+    : '--:--';
+
+  const arrivalTimeStr = estimatedArrival
+    ? estimatedArrival.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})
+    : '--:--';
+
+  // 남은 비행 시간
+  const getTimeRemaining = () => {
+    if (!distanceToDestNM || !displayAircraft?.ground_speed || displayAircraft.ground_speed < 50) return null;
+    const minutes = Math.round((distanceToDestNM / displayAircraft.ground_speed) * 60);
+    if (minutes < 60) return `${minutes}분`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}시간 ${mins}분`;
+  };
 
   return (
     <div className="takeoff-landing-section">
       <div className="takeoff-landing-grid">
-        <div className={`tl-item takeoff ${actualTakeoffTime || flightSchedule?.schedule?.atd || flightSchedule?.departure?.actual ? '' : 'estimated'}`}>
+        <div className={`tl-item takeoff ${actualTakeoffTime ? '' : 'estimated'}`}>
           <span className="tl-label">이륙</span>
-          <span className="tl-time">{takeoffTime}</span>
+          <span className="tl-time">{takeoffTimeStr}</span>
         </div>
-        <div className={`tl-item landing ${flightSchedule?.arrival?.actual ? '' : 'estimated'}`}>
-          <span className="tl-label">착륙</span>
-          <span className="tl-time">
-            {(flightSchedule?.arrival?.actual ? new Date(flightSchedule.arrival.actual).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : null) ||
-             flightSchedule?.schedule?.eta ||
-             flightSchedule?.schedule?.sta ||
-             (flightSchedule?.arrival?.scheduled ? new Date(flightSchedule.arrival.scheduled).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}) : '--:--')}
-          </span>
+        <div className={`tl-item landing estimated`}>
+          <span className="tl-label">착륙 예정</span>
+          <span className="tl-time">{arrivalTimeStr}</span>
+          {getTimeRemaining() && (
+            <span className="tl-remaining">({getTimeRemaining()} 후)</span>
+          )}
         </div>
       </div>
+      {distanceToDestNM && (
+        <div className="distance-remaining">
+          도착까지 {Math.round(distanceToDestNM)} NM
+        </div>
+      )}
     </div>
   );
 };
@@ -825,6 +862,8 @@ const AircraftDetailPanel = ({
             flightTrack={flightTrack}
             aircraftTrails={aircraftTrails}
             aircraftHex={displayAircraft.hex}
+            displayAircraft={displayAircraft}
+            AIRPORT_DATABASE={AIRPORT_DATABASE}
           />
 
           {/* Flight Data */}
