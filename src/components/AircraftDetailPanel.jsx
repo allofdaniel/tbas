@@ -103,13 +103,18 @@ const RouteSection = ({ displayAircraft, flightSchedule, flightScheduleLoading, 
  * 실제 비행 데이터 기반으로 이륙 시간과 예상 착륙 시간 계산
  */
 const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, aircraftHex, displayAircraft, AIRPORT_DATABASE }) => {
+  // Debug: component render tracking
+  console.log('[TakeoffLanding] === RENDER ===', aircraftHex);
+  console.log('[TakeoffLanding] flightTrack:', flightTrack ? `path.length=${flightTrack.path?.length}` : 'null');
+  console.log('[TakeoffLanding] aircraftTrails[hex]:', aircraftTrails?.[aircraftHex]?.length || 0);
+
   // 실제 비행 데이터에서 이륙 시간 추출 (AltitudeGraphSection과 동일한 로직)
   const getActualTakeoffTime = () => {
     const historicalData = flightTrack?.path || [];
     const realtimeData = aircraftTrails?.[aircraftHex] || [];
 
-    console.log('[TakeoffLanding] historicalData.length:', historicalData.length);
-    console.log('[TakeoffLanding] realtimeData.length:', realtimeData.length);
+    console.log('[TakeoffLanding] getActualTakeoffTime - historicalData.length:', historicalData.length);
+    console.log('[TakeoffLanding] getActualTakeoffTime - realtimeData.length:', realtimeData.length);
     if (historicalData.length > 0) {
       console.log('[TakeoffLanding] first hist point:', historicalData[0]);
     }
@@ -204,14 +209,20 @@ const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, ai
   const estimatedArrival = getEstimatedArrival();
   const distanceToDestNM = getDistanceToDestination();
 
+  console.log('[TakeoffLanding] RESULT - actualTakeoffTime:', actualTakeoffTime,
+    actualTakeoffTime ? new Date(actualTakeoffTime).toLocaleString('ko-KR') : 'null');
+
   // 이륙 시간이나 착륙 예정이 없으면 표시 안 함
   if (!actualTakeoffTime && !estimatedArrival) {
+    console.log('[TakeoffLanding] Returning null - no takeoff or arrival time');
     return null;
   }
 
   const takeoffTimeStr = actualTakeoffTime
     ? new Date(actualTakeoffTime).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})
     : '--:--';
+
+  console.log('[TakeoffLanding] DISPLAY takeoffTimeStr:', takeoffTimeStr);
 
   const arrivalTimeStr = estimatedArrival
     ? estimatedArrival.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})
