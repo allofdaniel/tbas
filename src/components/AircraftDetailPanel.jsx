@@ -108,6 +108,12 @@ const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, ai
     const historicalData = flightTrack?.path || [];
     const realtimeData = aircraftTrails?.[aircraftHex] || [];
 
+    console.log('[TakeoffLanding] historicalData.length:', historicalData.length);
+    console.log('[TakeoffLanding] realtimeData.length:', realtimeData.length);
+    if (historicalData.length > 0) {
+      console.log('[TakeoffLanding] first hist point:', historicalData[0]);
+    }
+
     let trackData = [];
 
     // Merge historical and realtime data (same logic as AltitudeGraphSection)
@@ -146,8 +152,11 @@ const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, ai
     if (trackData.length > 0) {
       const firstPoint = trackData[0];
       const timestamp = firstPoint.time ? firstPoint.time * 1000 : firstPoint.timestamp;
+      console.log('[TakeoffLanding] firstPoint:', firstPoint);
+      console.log('[TakeoffLanding] calculated timestamp:', timestamp, '→', timestamp ? new Date(timestamp).toLocaleString('ko-KR') : 'null');
       return timestamp || null;
     }
+    console.log('[TakeoffLanding] No track data, returning null');
     return null;
   };
 
