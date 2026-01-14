@@ -101,22 +101,19 @@ const RouteSection = ({ displayAircraft, flightSchedule, flightScheduleLoading, 
 /**
  * Takeoff/Landing Time Section
  * 실제 비행 데이터 기반으로 이륙 시간과 예상 착륙 시간 계산
+ * IMPORTANT: 이륙 시간은 반드시 historical 데이터(OpenSky)가 있어야만 표시
+ * realtimeData만으로는 이륙 시간을 알 수 없음 (세션 시작 이후 데이터만 있음)
  */
 const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, aircraftHex, displayAircraft, AIRPORT_DATABASE }) => {
-  // Debug: component render tracking
-  console.log('[TakeoffLanding] === RENDER ===', aircraftHex);
-  console.log('[TakeoffLanding] flightTrack:', flightTrack ? `path.length=${flightTrack.path?.length}` : 'null');
-  console.log('[TakeoffLanding] aircraftTrails[hex]:', aircraftTrails?.[aircraftHex]?.length || 0);
-
   // 실제 비행 데이터에서 이륙 시간 추출 (AltitudeGraphSection과 동일한 로직)
   const getActualTakeoffTime = () => {
     const historicalData = flightTrack?.path || [];
     const realtimeData = aircraftTrails?.[aircraftHex] || [];
 
-    console.log('[TakeoffLanding] getActualTakeoffTime - historicalData.length:', historicalData.length);
-    console.log('[TakeoffLanding] getActualTakeoffTime - realtimeData.length:', realtimeData.length);
-    if (historicalData.length > 0) {
-      console.log('[TakeoffLanding] first hist point:', historicalData[0]);
+    // CRITICAL: historicalData가 없으면 이륙 시간을 계산할 수 없음
+    // realtimeData만 있는 경우, 세션 시작 이후 데이터만 있어서 실제 이륙 시간을 알 수 없음
+    if (historicalData.length === 0) {
+      return null;
     }
 
     let trackData = [];
@@ -132,10 +129,8 @@ const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, ai
       });
 
       trackData = [...historicalData, ...newerRealtimeData];
-    } else if (historicalData.length > 0) {
-      trackData = historicalData;
     } else {
-      trackData = realtimeData;
+      trackData = historicalData;
     }
 
     // Filter out ground data (on_ground=true or altitude < 100ft at start)
@@ -157,11 +152,8 @@ const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, ai
     if (trackData.length > 0) {
       const firstPoint = trackData[0];
       const timestamp = firstPoint.time ? firstPoint.time * 1000 : firstPoint.timestamp;
-      console.log('[TakeoffLanding] firstPoint:', firstPoint);
-      console.log('[TakeoffLanding] calculated timestamp:', timestamp, '→', timestamp ? new Date(timestamp).toLocaleString('ko-KR') : 'null');
       return timestamp || null;
     }
-    console.log('[TakeoffLanding] No track data, returning null');
     return null;
   };
 
@@ -209,20 +201,14 @@ const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, ai
   const estimatedArrival = getEstimatedArrival();
   const distanceToDestNM = getDistanceToDestination();
 
-  console.log('[TakeoffLanding] RESULT - actualTakeoffTime:', actualTakeoffTime,
-    actualTakeoffTime ? new Date(actualTakeoffTime).toLocaleString('ko-KR') : 'null');
-
   // 이륙 시간이나 착륙 예정이 없으면 표시 안 함
   if (!actualTakeoffTime && !estimatedArrival) {
-    console.log('[TakeoffLanding] Returning null - no takeoff or arrival time');
     return null;
   }
 
   const takeoffTimeStr = actualTakeoffTime
     ? new Date(actualTakeoffTime).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})
     : '--:--';
-
-  console.log('[TakeoffLanding] DISPLAY takeoffTimeStr:', takeoffTimeStr);
 
   const arrivalTimeStr = estimatedArrival
     ? estimatedArrival.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})
