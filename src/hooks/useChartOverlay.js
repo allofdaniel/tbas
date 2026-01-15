@@ -30,14 +30,18 @@ const useChartOverlay = (map, mapLoaded, activeCharts, chartOpacities, chartBoun
       const bounds = chartBounds[chartId]?.bounds;
 
       if (isActive && bounds) {
-        if (!map.current.getSource(sourceId)) {
+        try {
+          // Remove existing layer/source first if they exist (for style changes)
+          if (map.current.getLayer(layerId)) map.current.removeLayer(layerId);
+          if (map.current.getSource(sourceId)) map.current.removeSource(sourceId);
+
+          // Add source and layer
           map.current.addSource(sourceId, {
             type: 'image',
             url: PROCEDURE_CHARTS[chartId].file,
             coordinates: bounds
           });
-        }
-        if (!map.current.getLayer(layerId)) {
+
           // Find a suitable layer to insert before, or add on top
           const beforeLayer = map.current.getLayer('runway') ? 'runway' : undefined;
           map.current.addLayer({
@@ -46,8 +50,8 @@ const useChartOverlay = (map, mapLoaded, activeCharts, chartOpacities, chartBoun
             source: sourceId,
             paint: { 'raster-opacity': chartOpacities[chartId] || 0.7 }
           }, beforeLayer);
-        } else {
-          map.current.setPaintProperty(layerId, 'raster-opacity', chartOpacities[chartId] || 0.7);
+        } catch (e) {
+          console.warn(`Failed to add chart overlay ${chartId}:`, e);
         }
       } else {
         safeRemove('Layer', layerId);

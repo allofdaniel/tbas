@@ -82,21 +82,26 @@ const useMapStyle = ({
         });
       }
 
-      // 검은 배경 모드가 아닐 때만 빌딩 추가
-      if (!(atcOnlyMode && radarBlackBackground) && !map.current.getLayer('3d-buildings') && map.current.getSource('composite')) {
-        map.current.addLayer({
-          id: '3d-buildings',
-          source: 'composite',
-          'source-layer': 'building',
-          type: 'fill-extrusion',
-          minzoom: 12,
-          paint: {
-            'fill-extrusion-color': '#aaa',
-            'fill-extrusion-height': ['get', 'height'],
-            'fill-extrusion-base': ['get', 'min_height'],
-            'fill-extrusion-opacity': 0.6
-          }
-        });
+      // 검은 배경 모드가 아닐 때만 빌딩 추가 (composite source가 있는 스타일에서만)
+      try {
+        if (!(atcOnlyMode && radarBlackBackground) && !map.current.getLayer('3d-buildings') && map.current.getSource('composite')) {
+          map.current.addLayer({
+            id: '3d-buildings',
+            source: 'composite',
+            'source-layer': 'building',
+            type: 'fill-extrusion',
+            minzoom: 12,
+            paint: {
+              'fill-extrusion-color': '#aaa',
+              'fill-extrusion-height': ['get', 'height'],
+              'fill-extrusion-base': ['get', 'min_height'],
+              'fill-extrusion-opacity': 0.6
+            }
+          });
+        }
+      } catch (e) {
+        // 스타일에 composite source가 없으면 무시 (검은 배경 모드)
+        console.debug('3D buildings skipped - no composite source');
       }
 
       // Add runway source and layer

@@ -49,11 +49,16 @@ export default function useDataLoading() {
   // Load chart bounds
   useEffect(() => {
     fetch('/charts/chart_bounds.json')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then((bounds) => {
         setChartBounds(bounds);
         setChartOpacities(Object.fromEntries(Object.keys(bounds).map(k => [k, 0.7])));
-      });
+        console.log(`Loaded chart bounds for ${Object.keys(bounds).length} charts`);
+      })
+      .catch((err) => console.warn('Failed to load chart bounds:', err));
   }, []);
 
   // Load ATC sectors

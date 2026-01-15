@@ -39,9 +39,15 @@ const AircraftPhotoSection = ({
         onError={(e) => { e.target.style.display = 'none'; }}
       />
     )}
-    {(aircraftPhoto?.photographer || (flightSchedule?.aircraft_images?.[0]?.src && flightSchedule?._source === 'flightradar24')) && (
+    {/* Photo credit: 실제 표시되는 이미지 소스와 일치하는 credit 표시 */}
+    {aircraftPhoto?.image && aircraftPhoto?.photographer && (
       <div className="aircraft-photo-credit">
-        📷 {aircraftPhoto?.photographer || 'FlightRadar24'}
+        📷 {aircraftPhoto.photographer}
+      </div>
+    )}
+    {!aircraftPhoto?.image && flightSchedule?.aircraft_images?.[0]?.src && (
+      <div className="aircraft-photo-credit">
+        📷 FlightRadar24
       </div>
     )}
     {!aircraftPhoto?.image && !flightSchedule?.aircraft_images?.[0]?.src && (displayAircraft.icao_type || displayAircraft.type) && (
@@ -104,7 +110,7 @@ const RouteSection = ({ displayAircraft, flightSchedule, flightScheduleLoading, 
  * IMPORTANT: 이륙 시간은 반드시 historical 데이터(OpenSky)가 있어야만 표시
  * realtimeData만으로는 이륙 시간을 알 수 없음 (세션 시작 이후 데이터만 있음)
  */
-const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, aircraftHex, displayAircraft, AIRPORT_DATABASE }) => {
+const TakeoffLandingSection = ({ flightSchedule, flightTrack, flightTrackLoading, aircraftTrails, aircraftHex, displayAircraft, AIRPORT_DATABASE }) => {
   // 실제 비행 데이터에서 이륙 시간 추출 (AltitudeGraphSection과 동일한 로직)
   const getActualTakeoffTime = () => {
     const historicalData = flightTrack?.path || [];
@@ -160,9 +166,9 @@ const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, ai
   // 도착 공항까지 거리 계산 (NM)
   const getDistanceToDestination = () => {
     const destIcao = flightSchedule?.arrival?.icao;
-    if (!destIcao || !AIRPORT_DATABASE?.[destIcao]) return null;
+    const dest = AIRPORT_DATABASE?.[destIcao];
+    if (!destIcao || !dest) return null;
 
-    const dest = AIRPORT_DATABASE[destIcao];
     const lat1 = displayAircraft?.lat;
     const lon1 = displayAircraft?.lon;
     const lat2 = dest.lat;
@@ -200,6 +206,24 @@ const TakeoffLandingSection = ({ flightSchedule, flightTrack, aircraftTrails, ai
   const actualTakeoffTime = getActualTakeoffTime();
   const estimatedArrival = getEstimatedArrival();
   const distanceToDestNM = getDistanceToDestination();
+
+  // 비행 데이터 로딩 중이면 로딩 표시
+  if (flightTrackLoading) {
+    return (
+      <div className="takeoff-landing-section loading">
+        <div className="takeoff-landing-grid">
+          <div className="tl-item takeoff">
+            <span className="tl-label">이륙</span>
+            <span className="tl-time loading-placeholder">--:--</span>
+          </div>
+          <div className="tl-item landing">
+            <span className="tl-label">착륙 예정</span>
+            <span className="tl-time loading-placeholder">--:--</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 이륙 시간이나 착륙 예정이 없으면 표시 안 함
   if (!actualTakeoffTime && !estimatedArrival) {
@@ -886,6 +910,7 @@ const AircraftDetailPanel = ({
           <TakeoffLandingSection
             flightSchedule={flightSchedule}
             flightTrack={flightTrack}
+            flightTrackLoading={flightTrackLoading}
             aircraftTrails={aircraftTrails}
             aircraftHex={displayAircraft.hex}
             displayAircraft={displayAircraft}

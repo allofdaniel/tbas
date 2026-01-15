@@ -169,6 +169,13 @@ export default function useSelectedAircraft(selectedAircraft) {
                 const eta = new Date();
                 eta.setHours(hour, minute, 0, 0);
 
+                // 날짜 정보가 없으므로 크로스-데이 처리 필요:
+                // ETA가 현재보다 6시간 이상 미래면, 어제 스케줄로 간주하여 하루 전으로 조정
+                const sixHours = 6 * 60 * 60 * 1000;
+                if (eta - now > sixHours) {
+                  eta.setDate(eta.getDate() - 1);
+                }
+
                 // 착륙 예정 시간이 현재보다 2시간 이상 과거면 stale
                 return (now - eta) > 2 * 60 * 60 * 1000;
               };
@@ -243,6 +250,13 @@ export default function useSelectedAircraft(selectedAircraft) {
               const now = new Date();
               const eta = new Date();
               eta.setHours(hour, minute, 0, 0);
+
+              // 날짜 정보가 없으므로 크로스-데이 처리 필요:
+              // ETA가 현재보다 6시간 이상 미래면, 어제 스케줄로 간주하여 하루 전으로 조정
+              const sixHours = 6 * 60 * 60 * 1000;
+              if (eta - now > sixHours) {
+                eta.setDate(eta.getDate() - 1);
+              }
 
               // 착륙 예정 시간이 현재보다 2시간 이상 과거면 stale
               return (now - eta) > 2 * 60 * 60 * 1000;

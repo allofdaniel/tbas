@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * useWeatherLayers - 기상 레이어 시각화 관리 훅
@@ -318,6 +318,32 @@ export default function useWeatherLayers(
     };
   }, [showSigmet, sigmetData, mapLoaded]);
 
+  // RainViewer API에서 가용한 타임스탬프 가져오기
+  const [radarTimestamp, setRadarTimestamp] = useState(null);
+  const [radarHost, setRadarHost] = useState('https://tilecache.rainviewer.com');
+
+  useEffect(() => {
+    if (!showRadar) return;
+
+    const fetchRadarData = async () => {
+      try {
+        const response = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+        const data = await response.json();
+        if (data?.radar?.past?.length > 0) {
+          const latestFrame = data.radar.past[data.radar.past.length - 1];
+          setRadarTimestamp(latestFrame.path);
+          setRadarHost(data.host);
+        }
+      } catch (e) {
+        console.error('Failed to fetch radar data:', e);
+      }
+    };
+
+    fetchRadarData();
+    const interval = setInterval(fetchRadarData, 300000); // 5분마다 갱신
+    return () => clearInterval(interval);
+  }, [showRadar]);
+
   // Radar overlay rendering
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
@@ -328,19 +354,19 @@ export default function useWeatherLayers(
     try { if (map.current.getLayer(layerId)) map.current.removeLayer(layerId); } catch (e) {}
     try { if (map.current.getSource(sourceId)) map.current.removeSource(sourceId); } catch (e) {}
 
-    if (!showRadar) return;
+    if (!showRadar || !radarTimestamp) return;
 
-    // RainViewer API - global radar tiles
-    const timestamp = Math.floor(Date.now() / 1000) - 600; // 10 minutes ago
+    // RainViewer API - 실제 가용한 타임스탬프 사용
+    const tileUrl = `${radarHost}${radarTimestamp}/256/{z}/{x}/{y}/4/1_1.png`;
 
     map.current.addSource(sourceId, {
       type: 'raster',
-      tiles: [
-        `https://tilecache.rainviewer.com/v2/radar/${timestamp}/256/{z}/{x}/{y}/2/1_1.png`
-      ],
+      tiles: [tileUrl],
       tileSize: 256
     });
 
+    // 존재하지 않을 수 있는 레이어 이름 대신 안전하게 추가
+    const beforeLayer = map.current.getLayer('aeroway-line') ? 'aeroway-line' : undefined;
     map.current.addLayer({
       id: layerId,
       type: 'raster',
@@ -349,11 +375,11 @@ export default function useWeatherLayers(
         'raster-opacity': 0.6,
         'raster-fade-duration': 0
       }
-    }, 'aeroway-line'); // Place under airport features
+    }, beforeLayer);
 
     return () => {
       try { if (map.current?.getLayer(layerId)) map.current.removeLayer(layerId); } catch (e) {}
       try { if (map.current?.getSource(sourceId)) map.current.removeSource(sourceId); } catch (e) {}
     };
-  }, [showRadar, mapLoaded]);
+  }, [showRadar, radarTimestamp, radarHost, mapLoaded]);
 }

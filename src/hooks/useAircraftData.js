@@ -13,6 +13,8 @@ export default function useAircraftData(data, mapLoaded, showAircraft, trailDura
   const [aircraftTrails, setAircraftTrails] = useState({});
   const [tracesLoaded, setTracesLoaded] = useState(new Set());
   const aircraftIntervalRef = useRef(null);
+  // tracesLoaded를 ref로도 유지하여 fetchAircraftData의 dependency 순환 방지
+  const tracesLoadedRef = useRef(new Set());
 
   // 개별 항공기의 과거 위치 히스토리 로드
   const loadAircraftTrace = useCallback(async (hex) => {
@@ -79,10 +81,11 @@ export default function useAircraftData(data, mapLoaded, showAircraft, trailDura
 
       // 새로운 항공기들의 trace 로드 (이미 로드한 항공기 제외)
       // 새로고침 시 모든 비행중인 항공기의 이전 항적을 로드
-      const newAircraft = processed.filter(ac => !tracesLoaded.has(ac.hex) && !ac.on_ground);
+      // tracesLoadedRef를 사용하여 dependency 순환 방지
+      const newAircraft = processed.filter(ac => !tracesLoadedRef.current.has(ac.hex) && !ac.on_ground);
       if (newAircraft.length > 0) {
         // 처음 로드 시에도 5개로 제한 (외부 접속 성능 최적화)
-        const isFirstLoad = tracesLoaded.size === 0;
+        const isFirstLoad = tracesLoadedRef.current.size === 0;
         const maxLoad = isFirstLoad ? 5 : 3;
         const toLoad = newAircraft.slice(0, maxLoad);
 
@@ -90,6 +93,8 @@ export default function useAircraftData(data, mapLoaded, showAircraft, trailDura
         const tracePromises = toLoad.map(ac => loadAircraftTrace(ac.hex).then(trace => ({ hex: ac.hex, trace })));
         const traces = await Promise.all(tracePromises);
 
+        // ref와 state 모두 업데이트 (ref는 fetchAircraftData 내부용, state는 외부 노출용)
+        toLoad.forEach(ac => tracesLoadedRef.current.add(ac.hex));
         setTracesLoaded(prev => {
           const next = new Set(prev);
           toLoad.forEach(ac => next.add(ac.hex));
@@ -124,7 +129,8 @@ export default function useAircraftData(data, mapLoaded, showAircraft, trailDura
       });
       setAircraft(processed);
     } catch (e) { console.error('Aircraft fetch failed:', e); }
-  }, [data?.airport, trailDuration, tracesLoaded, loadAircraftTrace]);
+    // tracesLoaded를 dependency에서 제거 (tracesLoadedRef 사용으로 interval 재시작 루프 방지)
+  }, [data?.airport, trailDuration, loadAircraftTrace]);
 
   useEffect(() => {
     if (!showAircraft || !data?.airport || !mapLoaded) return;
