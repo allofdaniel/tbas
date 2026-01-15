@@ -320,7 +320,6 @@ export default function useWeatherLayers(
 
   // RainViewer API에서 가용한 타임스탬프 가져오기
   const [radarTimestamp, setRadarTimestamp] = useState(null);
-  const [radarHost, setRadarHost] = useState('https://tilecache.rainviewer.com');
 
   useEffect(() => {
     if (!showRadar) return;
@@ -332,7 +331,6 @@ export default function useWeatherLayers(
         if (data?.radar?.past?.length > 0) {
           const latestFrame = data.radar.past[data.radar.past.length - 1];
           setRadarTimestamp(latestFrame.path);
-          setRadarHost(data.host);
         }
       } catch (e) {
         console.error('Failed to fetch radar data:', e);
@@ -356,8 +354,9 @@ export default function useWeatherLayers(
 
     if (!showRadar || !radarTimestamp) return;
 
-    // RainViewer API - 실제 가용한 타임스탬프 사용
-    const tileUrl = `${radarHost}${radarTimestamp}/256/{z}/{x}/{y}/4/1_1.png`;
+    // 프록시 API를 통해 CORS 문제 해결
+    const proxyPath = `${radarTimestamp}/256/{z}/{x}/{y}/4/1_1.png`;
+    const tileUrl = `/api/radar-tile?path=${proxyPath}`;
 
     map.current.addSource(sourceId, {
       type: 'raster',
@@ -381,5 +380,5 @@ export default function useWeatherLayers(
       try { if (map.current?.getLayer(layerId)) map.current.removeLayer(layerId); } catch (e) {}
       try { if (map.current?.getSource(sourceId)) map.current.removeSource(sourceId); } catch (e) {}
     };
-  }, [showRadar, radarTimestamp, radarHost, mapLoaded]);
+  }, [showRadar, radarTimestamp, mapLoaded]);
 }
