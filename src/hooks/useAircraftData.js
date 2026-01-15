@@ -7,6 +7,7 @@ import { getAircraftApiUrl, getAircraftTraceUrl, AIRCRAFT_UPDATE_INTERVAL } from
  * - ADS-B 데이터 폴링
  * - 항적 히스토리 로딩
  * - 항공기 상태 관리
+ * - 429 에러 시 백오프 처리
  */
 export default function useAircraftData(data, mapLoaded, showAircraft, trailDuration) {
   const [aircraft, setAircraft] = useState([]);
@@ -15,12 +16,38 @@ export default function useAircraftData(data, mapLoaded, showAircraft, trailDura
   const aircraftIntervalRef = useRef(null);
   // tracesLoaded를 ref로도 유지하여 fetchAircraftData의 dependency 순환 방지
   const tracesLoadedRef = useRef(new Set());
+  // 429 에러 백오프
+  const backoffRef = useRef(0);
+  const lastErrorTimeRef = useRef(0);
 
   // 개별 항공기의 과거 위치 히스토리 로드
   const loadAircraftTrace = useCallback(async (hex) => {
     try {
       const response = await fetch(getAircraftTraceUrl(hex));
-      const result = await response.json();
+
+      // 429 Too Many Requests 또는 다른 에러 상태 처리
+      if (!response.ok) {
+        if (response.status === 429) {
+          console.warn(`Aircraft trace API 429 for ${hex}: rate limited`);
+        }
+        return null;
+      }
+
+      // Content-Type 확인 (HTML 에러 페이지 감지)
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.warn(`Aircraft trace for ${hex}: invalid content-type (${contentType})`);
+        return null;
+      }
+
+      // 텍스트로 먼저 읽어서 유효성 검사
+      const text = await response.text();
+      if (!text || text.length < 2 || text.startsWith('<!') || text.startsWith('You')) {
+        console.warn(`Aircraft trace for ${hex}: invalid response (HTML or rate limit message)`);
+        return null;
+      }
+
+      const result = JSON.parse(text);
       const ac = result.ac?.[0];
       if (!ac || !ac.trace) return null;
 
@@ -42,16 +69,36 @@ export default function useAircraftData(data, mapLoaded, showAircraft, trailDura
       });
       return tracePoints;
     } catch (e) {
-      console.error(`Failed to load trace for ${hex}:`, e);
+      // JSON 파싱 에러 등을 조용히 처리
+      console.warn(`Failed to load trace for ${hex}:`, e.message);
       return null;
     }
   }, [trailDuration]);
 
   const fetchAircraftData = useCallback(async () => {
     if (!data?.airport) return;
+
+    // 백오프 중이면 스킵
+    if (backoffRef.current > 0 && Date.now() - lastErrorTimeRef.current < backoffRef.current) {
+      console.log(`Aircraft API: backing off for ${Math.round(backoffRef.current / 1000)}s`);
+      return;
+    }
+
     try {
       const { lat, lon } = data.airport;
       const response = await fetch(getAircraftApiUrl(lat, lon, 100));
+
+      // 429 Too Many Requests 처리
+      if (response.status === 429) {
+        lastErrorTimeRef.current = Date.now();
+        backoffRef.current = Math.min((backoffRef.current || 15000) * 2, 120000); // 최대 2분
+        console.warn(`Aircraft API 429: backing off for ${backoffRef.current / 1000}s`);
+        return;
+      }
+
+      // 성공 시 백오프 리셋
+      backoffRef.current = 0;
+
       const result = await response.json();
       const aircraftData = result.ac || [];
 

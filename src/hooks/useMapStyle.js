@@ -142,15 +142,7 @@ const useMapStyle = ({
     }
   }, [map, is3DView, mapLoaded]);
 
-  // Handle 3D buildings visibility
-  useEffect(() => {
-    if (!map?.current || !mapLoaded) return;
-    try {
-      if (map.current.getLayer('3d-buildings')) {
-        map.current.setLayoutProperty('3d-buildings', 'visibility', is3DView ? 'visible' : 'none');
-      }
-    } catch (e) {}
-  }, [map, is3DView, mapLoaded]);
+  // NOTE: 3D buildings visibility is managed by App.jsx to consider both is3DView and showBuildings
 };
 
 export default useMapStyle;

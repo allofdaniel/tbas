@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { IS_PRODUCTION, NOTAM_CACHE_DURATION } from '../constants/config';
+import { NOTAM_CACHE_DURATION } from '../constants/config';
 
 /**
  * useNotamData - NOTAM 데이터 관리 훅
@@ -70,26 +70,53 @@ export default function useNotamData(showNotamPanel) {
     setNotamLoading(true);
     setNotamError(null);
     try {
-      // Use production URL in development, local API in production
-      const baseUrl = IS_PRODUCTION ? '/api/notam' : 'https://rkpu-viewer.vercel.app/api/notam';
-      const params = new URLSearchParams();
+      let response;
+      let usedFallback = false;
 
-      // Always use complete DB with appropriate period filter
-      params.set('source', 'complete');
-      params.set('period', period); // 'current', '1month', '1year', or 'all'
+      // Try API first, fallback to local data if it fails
+      try {
+        const params = new URLSearchParams();
+        params.set('source', 'complete');
+        params.set('period', period);
+        params.set('bounds', '32,123,44,146');
+        const url = '/api/notam?' + params.toString();
 
-      // Use fixed Korea+Japan region bounds instead of map bounds
-      // This ensures all Korean airports are always included
-      // Korea: 33-43N, 124-132E, Japan nearby: extend to 145E
-      params.set('bounds', '32,123,44,146');
+        response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const url = baseUrl + '?' + params.toString();
+        // Check if response is JSON (Vite dev server returns HTML for missing routes)
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Response is not JSON');
+        }
+      } catch (apiError) {
+        console.log('NOTAM API failed, trying local fallback:', apiError.message);
+        // Fallback to local mock data
+        response = await fetch('/data/notams.json');
+        usedFallback = true;
+        if (!response.ok) throw new Error(`Fallback also failed: HTTP ${response.status}`);
+      }
+      const rawData = await response.json();
 
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const json = await response.json();
+      // Handle both API response format and direct S3 JSON array
+      let json;
+      if (Array.isArray(rawData)) {
+        // Direct S3 response - wrap in expected format
+        json = {
+          data: rawData,
+          count: rawData.length,
+          returned: rawData.length,
+          source: 's3-direct'
+        };
+      } else {
+        json = rawData;
+      }
 
       // 2. 캐시에 저장
+      if (usedFallback) {
+        json.source = 'local-demo';
+        console.log('Using local demo NOTAM data');
+      }
       setNotamCache(period, json);
       setNotamCacheAge(0);
 

@@ -9,8 +9,8 @@ export const IS_PRODUCTION = import.meta.env.PROD;
 // Mapbox 설정
 export const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoiYWxsb2ZkYW5pZWwiLCJhIjoiY21pbzY5ejhkMDJvZzNjczVwMmlhYTljaiJ9.eSoww-z9bQuolQ4fQHqZOg';
 
-// 항공기 업데이트 간격 (밀리초)
-export const AIRCRAFT_UPDATE_INTERVAL = 5000;
+// 항공기 업데이트 간격 (밀리초) - 429 오류 방지를 위해 15초로 설정
+export const AIRCRAFT_UPDATE_INTERVAL = 15000;
 
 // NOTAM 캐시 설정
 export const NOTAM_CACHE_DURATION = 10 * 60 * 1000; // 10분
@@ -80,7 +80,13 @@ export const MAP_STYLES = {
   dark: 'mapbox://styles/mapbox/dark-v11',
   light: 'mapbox://styles/mapbox/light-v11',
   satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
-  black: { version: 8, name: 'Radar Black', sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#000000' } }] }
+  black: {
+    version: 8,
+    name: 'Radar Black',
+    glyphs: 'mapbox://fonts/mapbox/{fontstack}/{range}.pbf',
+    sources: {},
+    layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#000000' } }]
+  }
 };
 
 // 절차 차트 정보
