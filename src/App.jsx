@@ -439,10 +439,9 @@ function App() {
 
           {/* 관제구역 - ATC Sectors */}
           <Accordion
-            title="관제구역"
+            title={`관제구역${selectedAtcSectors.size > 0 ? ` (${selectedAtcSectors.size})` : ''}`}
             expanded={showAtcPanel}
             onToggle={() => setShowAtcPanel(!showAtcPanel)}
-            badge={selectedAtcSectors.size || undefined}
           >
             {atcData && (
               <>
