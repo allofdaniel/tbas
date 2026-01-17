@@ -25,7 +25,7 @@ const Accordion: React.FC<AccordionProps> = ({
     <div className={`section accordion ${className}`}>
       <div className="accordion-header" onClick={onToggle}>
         <span>{title}</span>
-        {badge != null && badge !== '' && <span className="badge">{badge}</span>}
+        {Boolean(badge) && <span className="badge">{badge}</span>}
         <span className={`accordion-icon ${expanded ? 'expanded' : ''}`}>▼</span>
       </div>
       <div className={`toggle-group accordion-content ${!expanded ? 'collapsed' : ''}`}>
