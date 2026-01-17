@@ -442,7 +442,7 @@ function App() {
             title="관제구역"
             expanded={showAtcPanel}
             onToggle={() => setShowAtcPanel(!showAtcPanel)}
-            badge={selectedAtcSectors.size > 0 ? selectedAtcSectors.size : null}
+            badge={selectedAtcSectors.size || undefined}
           >
             {atcData && (
               <>
