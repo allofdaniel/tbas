@@ -41,9 +41,13 @@
       (function() {
         function setAppHeight() {
           var vh = window.innerHeight;
-          document.documentElement.style.setProperty('--app-height', vh + 'px');
-          document.documentElement.style.height = vh + 'px';
-          document.body.style.height = vh + 'px';
+          if (document.documentElement) {
+            document.documentElement.style.setProperty('--app-height', vh + 'px');
+            document.documentElement.style.height = vh + 'px';
+          }
+          if (document.body) {
+            document.body.style.height = vh + 'px';
+          }
           var root = document.getElementById('root');
           if (root) root.style.height = vh + 'px';
         }

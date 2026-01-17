@@ -412,6 +412,30 @@ body {
   font-size: 16px;
 }
 
+/* Mini Button for ATC Sector Selection */
+.mini-btn {
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  transition: all 0.2s;
+  flex: 1;
+}
+
+.mini-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.mini-btn.active {
+  background: rgba(0, 255, 0, 0.3);
+  border-color: rgba(0, 255, 0, 0.5);
+  color: #00ff00;
+}
+
 /* Chart Control Items */
 .chart-control-item {
   display: flex;
@@ -476,6 +500,77 @@ body {
 
 .light-mode .opacity-control input[type="range"] {
   background: rgba(0, 0, 0, 0.2);
+}
+
+/* Airport Selector for Chart Overlay */
+.airport-selector {
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.airport-select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.airport-select:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.airport-select:focus {
+  outline: none;
+  border-color: #1a73e8;
+}
+
+.airport-select option {
+  background: #2d2d2d;
+  color: #fff;
+  padding: 8px;
+}
+
+.light-mode .airport-select {
+  border-color: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.light-mode .airport-select:hover {
+  border-color: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.light-mode .airport-select option {
+  background: #fff;
+  color: #333;
+}
+
+.chart-airport-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: #1a73e8;
+  border-radius: 4px;
+  margin-left: auto;
+  margin-right: 8px;
+  color: #fff;
+}
+
+.no-charts-message {
+  padding: 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+.light-mode .no-charts-message {
+  color: rgba(0, 0, 0, 0.4);
 }
 
 .chart-close-btn {

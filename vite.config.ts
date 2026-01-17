@@ -43,9 +43,21 @@ export default defineConfig({
           return `/v2/point/${lat}/${lon}/${radius}`;
         },
       },
+      // Weather API - disabled for local dev (requires KMA API key)
+      // Production uses Vercel serverless function with API keys
       '/api/weather': {
-        target: 'https://rkpu-viewer.vercel.app',
+        target: 'https://aviationweather.gov',
         changeOrigin: true,
+        rewrite: (path) => {
+          const params = new URLSearchParams(path.split('?')[1] || '');
+          const type = params.get('type') || 'metar';
+          if (type === 'metar') {
+            return `/api/data/metar?ids=RKPU&format=json`;
+          } else if (type === 'taf') {
+            return `/api/data/taf?ids=RKPU,RKPK&format=json`;
+          }
+          return `/api/data/metar?ids=RKPU&format=json`;
+        },
       },
       '/api/charts': {
         target: 'http://localhost:8080',

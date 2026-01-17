@@ -2,6 +2,15 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
+// Import Zustand stores
+import {
+  useMapStore,
+  useUIStore,
+  useAircraftStore,
+  useAtcStore,
+  useLayerStore,
+} from './stores';
+
 // Import toast hook
 import { useToast } from './components/Toast';
 
@@ -46,7 +55,6 @@ import {
 
 // Import hooks
 import {
-  useRadarLayer,
   useChartOverlay,
   useMapStyle,
   useAtcRadarRings,
@@ -73,9 +81,95 @@ function App() {
   const mapContainer = useRef(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Toast notifications
+  // ============================================
+  // Zustand Stores
+  // ============================================
+
+  // Map store
+  const {
+    is3DView, setIs3DView,
+    isDarkMode, setIsDarkMode,
+    showSatellite, setShowSatellite,
+    showBuildings,
+    showTerrain, setShowTerrain,
+    show3DAltitude, setShow3DAltitude,
+  } = useMapStore();
+
+  // UI store
+  const {
+    isPanelOpen, setIsPanelOpen,
+    layersExpanded, setLayersExpanded,
+    aircraftExpanded, setAircraftExpanded,
+    sidExpanded, setSidExpanded,
+    starExpanded, setStarExpanded,
+    apchExpanded, setApchExpanded,
+    chartExpanded, setChartExpanded,
+    koreaRoutesExpanded, setKoreaRoutesExpanded,
+    showAtcPanel, setShowAtcPanel,
+    atcExpanded, setAtcExpanded, toggleAtcSection,
+    showWxPanel, setShowWxPanel,
+    wxPanelTab, setWxPanelTab,
+    wxLayersExpanded, setWxLayersExpanded,
+    showNotamPanel, setShowNotamPanel,
+    showMetarPopup, setShowMetarPopup,
+    showTafPopup, setShowTafPopup,
+    metarPinned, setMetarPinned,
+    tafPinned, setTafPinned,
+    sectionExpanded, toggleSection,
+  } = useUIStore();
+
+  // Aircraft store
+  const {
+    showAircraft, setShowAircraft,
+    showAircraftTrails, setShowAircraftTrails,
+    show3DAircraft, setShow3DAircraft,
+    trailDuration, setTrailDuration,
+    headingPrediction, setHeadingPrediction,
+    labelOffset, setLabelOffset,
+    isDraggingLabel, setIsDraggingLabel,
+    selectedAircraft, setSelectedAircraft,
+    graphHoverData, setGraphHoverData,
+  } = useAircraftStore();
+
+  // ATC store
+  const {
+    atcOnlyMode, setAtcOnlyMode,
+    radarRange, setRadarRange,
+    radarBlackBackground, setRadarBlackBackground,
+    selectedAtcSectors, setSelectedAtcSectors,
+    toggleSectorGroup,
+  } = useAtcStore();
+
+  // Layer store
+  const {
+    showWaypoints, setShowWaypoints,
+    showObstacles, setShowObstacles,
+    showAirspace, setShowAirspace,
+    showLightning, setShowLightning,
+    showSigmet, setShowSigmet,
+    showKoreaRoutes, setShowKoreaRoutes,
+    showKoreaWaypoints, setShowKoreaWaypoints,
+    showKoreaNavaids, setShowKoreaNavaids,
+    showKoreaAirspaces, setShowKoreaAirspaces,
+  } = useLayerStore();
+
+  // ============================================
+  // Local State (남은 것들 - 데이터 관련)
+  // ============================================
+
+  const [activeCharts, setActiveCharts] = useState({});
+  const [selectedChartAirport, setSelectedChartAirport] = useState('RKPU');
+
+  // ============================================
+  // Toast & Refs
+  // ============================================
+
   const { addToast, updateToast, dismissToast } = useToast();
   const flightTrackToastRef = useRef(null);
+
+  // ============================================
+  // Custom Hooks
+  // ============================================
 
   // Map initialization hook
   const { map, mapLoaded, setMapLoaded } = useMapInit(mapContainer);
@@ -83,16 +177,13 @@ function App() {
   // Data loading hook
   const {
     data,
-    sidVisible,
-    setSidVisible,
-    starVisible,
-    setStarVisible,
-    apchVisible,
-    setApchVisible,
+    sidVisible, setSidVisible,
+    starVisible, setStarVisible,
+    apchVisible, setApchVisible,
     procColors,
     chartBounds,
-    chartOpacities,
-    setChartOpacities,
+    allChartBounds,
+    chartOpacities, setChartOpacities,
     atcData,
     koreaAirspaceData,
   } = useDataLoading();
@@ -100,174 +191,75 @@ function App() {
   // Window height hook (Android WebView fix)
   const windowHeight = useWindowHeight(map);
 
-  const [is3DView, setIs3DView] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [showSatellite, setShowSatellite] = useState(false);
-  const [showBuildings, setShowBuildings] = useState(true);
-
-  const [activeCharts, setActiveCharts] = useState({});
-
-  // Accordion states - all sections (기본 레이어만 열려있음)
-  const [layersExpanded, setLayersExpanded] = useState(true);
-  const [aircraftExpanded, setAircraftExpanded] = useState(false);
-  const [sidExpanded, setSidExpanded] = useState(false);
-  const [starExpanded, setStarExpanded] = useState(false);
-  const [apchExpanded, setApchExpanded] = useState(false);
-  const [chartExpanded, setChartExpanded] = useState(false);
-  // Mobile panel state
-  const [isPanelOpen, setIsPanelOpen] = useState(window.innerWidth > 768);
-
-  // METAR/TAF popup states (separate for METAR and TAF)
-  const [showMetarPopup, setShowMetarPopup] = useState(false);
-  const [showTafPopup, setShowTafPopup] = useState(false);
-  const [metarPinned, setMetarPinned] = useState(false);
-  const [tafPinned, setTafPinned] = useState(false);
-
-  const [showWaypoints, setShowWaypoints] = useState(false);
-  const [showObstacles, setShowObstacles] = useState(false);
-  const [showAirspace, setShowAirspace] = useState(true);
-  const [show3DAltitude, setShow3DAltitude] = useState(true);
-  const [showTerrain, setShowTerrain] = useState(true);
-
-  const [showAircraft, setShowAircraft] = useState(true);
-  const [showAircraftTrails, setShowAircraftTrails] = useState(true);
-  const [show3DAircraft, setShow3DAircraft] = useState(true);
-  const [trailDuration, setTrailDuration] = useState(60000); // 1분 기본값 (히스토리 길이)
-  const [headingPrediction, setHeadingPrediction] = useState(30); // 헤딩 예측 시간 (초) - 30초 기본
-  const [labelOffset, setLabelOffset] = useState({ x: 1.0, y: 0 }); // 라벨 오프셋 (사용자 드래그로 조절)
-  const [isDraggingLabel, setIsDraggingLabel] = useState(false); // 라벨 드래그 중인지
-  const [selectedAircraft, setSelectedAircraft] = useState(null); // 선택된 항공기 상세정보
-  const [graphHoverData, setGraphHoverData] = useState(null); // 고도 그래프 hover 데이터
-  // Note: aircraft, aircraftTrails, aircraftPhoto, aircraftDetails, flightSchedule, flightTrack
-  // are now managed by useAircraftData and useSelectedAircraft hooks
-  // Collapsible sections state
-  const [sectionExpanded, setSectionExpanded] = useState({
-    flightStatus: true,
-    aircraftInfo: true,
-    schedule: true,
-    graph: true,
-    position: true
-  });
-  const toggleSection = (section) => setSectionExpanded(prev => ({ ...prev, [section]: !prev[section] }));
-
-  // Aviation weather layers toggles
-  const [showRadar, setShowRadar] = useState(false);
-  const [showSatelliteWx, setShowSatelliteWx] = useState(false);
-  const [showLightning, setShowLightning] = useState(false);
-  const [showSigmet, setShowSigmet] = useState(false);
-  const [wxLayersExpanded, setWxLayersExpanded] = useState(false);
-
-  // Right panel weather detail state
-  const [showWxPanel, setShowWxPanel] = useState(false);
-  const [wxPanelTab, setWxPanelTab] = useState('sigmet'); // sigmet, notam, llws, lightning
-
-  // ATC Sectors panel
-  const [showAtcPanel, setShowAtcPanel] = useState(false);
-  const [atcExpanded, setAtcExpanded] = useState({ ACC: true, TMA: false, CTR: false });
-  const [selectedAtcSectors, setSelectedAtcSectors] = useState(new Set());
-
-  // ATC Only Mode (Radar Display) - 검은 배경 + 거리 링
-  const [atcOnlyMode, setAtcOnlyMode] = useState(false);
-  const [radarRange, setRadarRange] = useState(100); // 레이더 최대 범위 (nm) - 100nm 기본
-  const [radarBlackBackground, setRadarBlackBackground] = useState(true); // 레이더뷰 검은 배경 on/off
-
-  // NOTAM panel visibility
-  const [showNotamPanel, setShowNotamPanel] = useState(false);
-
-  // Korea Airspace visibility
-  const [showKoreaRoutes, setShowKoreaRoutes] = useState(false);
-  const [showKoreaWaypoints, setShowKoreaWaypoints] = useState(false);
-  const [showKoreaNavaids, setShowKoreaNavaids] = useState(false);
-  const [showKoreaAirspaces, setShowKoreaAirspaces] = useState(false);
-  const [koreaRoutesExpanded, setKoreaRoutesExpanded] = useState(false);
-
-  // Custom Hooks for map layers
-  const { radarData } = useRadarLayer(map, mapLoaded, showRadar);
-  useChartOverlay(map, mapLoaded, activeCharts, chartOpacities, chartBounds);
+  // Map style hook
   useMapStyle({
-    map,
-    mapLoaded,
-    setMapLoaded,
-    isDarkMode,
-    showSatellite,
-    atcOnlyMode,
-    radarBlackBackground,
-    is3DView,
-    showTerrain,
-    show3DAltitude
+    map, mapLoaded, setMapLoaded,
+    isDarkMode, showSatellite, atcOnlyMode, radarBlackBackground,
+    is3DView, showTerrain, show3DAltitude
   });
-  useAtcRadarRings(map, mapLoaded, atcOnlyMode, radarRange);
+
+  // Chart overlay hook
+  useChartOverlay(map, mapLoaded, activeCharts, chartOpacities, allChartBounds, selectedChartAirport);
+
+  // ATC hooks
+  useAtcRadarRings(map, mapLoaded, atcOnlyMode, radarRange, radarBlackBackground);
   useAtcSectors(map, mapLoaded, atcData, selectedAtcSectors);
   useKoreaAirspace(map, mapLoaded, koreaAirspaceData, showKoreaRoutes, showKoreaWaypoints, showKoreaNavaids, showKoreaAirspaces, is3DView, show3DAltitude);
 
-  // Aircraft data hook - 항공기 데이터 로딩
-  const {
-    aircraft,
-    aircraftTrails,
-  } = useAircraftData(data, mapLoaded, showAircraft, trailDuration);
+  // Aircraft data hook
+  const { aircraft, aircraftTrails } = useAircraftData(data, mapLoaded, showAircraft, trailDuration);
 
-  // Selected aircraft details hook - 선택된 항공기 상세 정보
+  // Selected aircraft details hook
   const {
-    aircraftPhoto,
-    aircraftPhotoLoading,
-    aircraftDetails,
-    aircraftDetailsLoading,
-    flightSchedule,
-    flightScheduleLoading,
-    flightTrack,
-    flightTrackLoading,
-    showAircraftPanel,
-    setShowAircraftPanel,
+    aircraftPhoto, aircraftPhotoLoading,
+    aircraftDetails, aircraftDetailsLoading,
+    flightSchedule, flightScheduleLoading,
+    flightTrack, flightTrackLoading,
+    showAircraftPanel, setShowAircraftPanel,
   } = useSelectedAircraft(selectedAircraft);
 
-  // Procedure rendering hook - SID/STAR/APCH 렌더링
+  // Procedure rendering hook
   const { hasActiveProcedure } = useProcedureRendering(
     map, mapLoaded, data, sidVisible, starVisible, apchVisible, procColors, is3DView, show3DAltitude
   );
 
-  // Aircraft visualization hook - 항공기 시각화
+  // Aircraft visualization hook
   useAircraftVisualization(
     map, mapLoaded, aircraft, aircraftTrails, showAircraft, showAircraftTrails,
     show3DAircraft, is3DView, show3DAltitude, trailDuration, headingPrediction, selectedAircraft, labelOffset
   );
 
-  // Aircraft click handler hook - 항공기 클릭 처리
+  // Aircraft click handler hook
   useAircraftClickHandler(map, mapLoaded, aircraft, selectedAircraft, setSelectedAircraft);
 
-  // Weather data hook - 기상 데이터 fetching
-  const {
-    weatherData,
-    lightningData,
-    sigmetData,
-  } = useWeatherData(data?.airport, showRadar, showSatelliteWx, showLightning, showSigmet, showWxPanel);
+  // Weather data hook
+  const { weatherData, lightningData, sigmetData } = useWeatherData(
+    data?.airport, false, false, showLightning, showSigmet, showWxPanel
+  );
 
-  // NOTAM data hook - NOTAM 데이터 관리
+  // NOTAM data hook
   const {
-    notamData,
-    notamLoading,
-    notamError,
-    notamCacheAge,
-    notamPeriod,
-    setNotamPeriod,
-    notamFilter,
-    setNotamFilter,
-    notamLocationFilter,
-    setNotamLocationFilter,
-    notamExpanded,
-    setNotamExpanded,
-    notamLocationsOnMap,
-    setNotamLocationsOnMap,
+    notamData, notamLoading, notamError, notamCacheAge,
+    notamPeriod, setNotamPeriod,
+    notamFilter, setNotamFilter,
+    notamLocationFilter, setNotamLocationFilter,
+    notamExpanded: notamItemExpanded, setNotamExpanded: setNotamItemExpanded,
+    notamLocationsOnMap, setNotamLocationsOnMap,
     fetchNotamData,
   } = useNotamData(showNotamPanel);
 
-  // Weather layers hook - 기상 레이어 (바람, 낙뢰, SIGMET, 레이더)
-  useWeatherLayers(map, mapLoaded, weatherData, data, showRadar, showLightning, lightningData, showSigmet, sigmetData);
+  // Weather layers hook
+  useWeatherLayers(map, mapLoaded, weatherData, data, false, showLightning, lightningData, showSigmet, sigmetData);
 
-  // NOTAM layer hook - NOTAM 지도 레이어
+  // NOTAM layer hook
   useNotamLayer(map, mapLoaded, notamLocationsOnMap, notamData, is3DView);
 
-  // Airspace layers hook - 공역/웨이포인트/장애물 렌더링
+  // Airspace layers hook
   useAirspaceLayers(map, mapLoaded, data, showWaypoints, showObstacles, showAirspace, show3DAltitude, is3DView, hasActiveProcedure);
+
+  // ============================================
+  // Effects
+  // ============================================
 
   // Flight track loading toast notification
   useEffect(() => {
@@ -294,10 +286,7 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // NOTE: Weather, NOTAM, and map initialization are handled by hooks
-
   // Handle terrain toggle
-  // 3D 고도 표시가 활성화되면 terrain을 비활성화하여 MSL(해수면) 기준 절대 고도로 표시
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     if (is3DView && showTerrain && !show3DAltitude) {
@@ -306,8 +295,6 @@ function App() {
       map.current.setTerrain(null);
     }
   }, [showTerrain, is3DView, show3DAltitude, mapLoaded]);
-
-  // NOTE: 2D/3D toggle is now handled by useMapStyle hook
 
   // Handle 3D buildings visibility
   useEffect(() => {
@@ -319,20 +306,32 @@ function App() {
     } catch (e) {}
   }, [showBuildings, is3DView, mapLoaded]);
 
-  // NOTE: Radar layer, style change, chart overlay useEffects are now managed by hooks:
-  // - useRadarLayer: handles radar data fetching and layer management
-  // - useMapStyle: handles style changes, 2D/3D toggle, terrain, buildings
-  // - useChartOverlay: handles chart overlay management
-  // - useAtcRadarRings: handles ATC radar rings and bearing lines
-  // - useAtcSectors: handles ATC sector 3D visualization
+  // ============================================
+  // Handlers
+  // ============================================
 
   const toggleChart = (chartId) => setActiveCharts(prev => ({ ...prev, [chartId]: !prev[chartId] }));
   const updateChartOpacity = (chartId, opacity) => setChartOpacities(prev => ({ ...prev, [chartId]: opacity }));
 
-  // NOTE: All rendering is handled by dedicated hooks - see hooks/index.js
-
   const flyToAirport = () => {
-    map.current?.flyTo({ center: [129.3518, 35.5934], zoom: 12, pitch: is3DView ? 60 : 0, bearing: is3DView ? -30 : 0, duration: 2000 });
+    map.current?.flyTo({
+      center: [129.3518, 35.5934],
+      zoom: 12,
+      pitch: is3DView ? 60 : 0,
+      bearing: is3DView ? -30 : 0,
+      duration: 2000
+    });
+  };
+
+  const handleAtcModeToggle = (enabled) => {
+    setAtcOnlyMode(enabled);
+    if (enabled) {
+      setIsDarkMode(true);
+      setShowSatellite(false);
+      if (map?.current) {
+        map.current.flyTo({ center: [129.3517, 35.5935], zoom: 5, pitch: 0, bearing: 0, duration: 1000 });
+      }
+    }
   };
 
   const chartsByRunway = {
@@ -340,16 +339,17 @@ function App() {
     '36': Object.entries(PROCEDURE_CHARTS).filter(([_, c]) => c.runway === '36'),
   };
 
+  // ============================================
+  // Render
+  // ============================================
+
   return (
     <div
       className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'}`}
       style={{
         height: `${windowHeight}px`,
         position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        top: 0, left: 0, right: 0, bottom: 0,
         overflow: 'hidden'
       }}
     >
@@ -381,29 +381,11 @@ function App() {
         setShowSatellite={setShowSatellite}
         wxLayersExpanded={wxLayersExpanded}
         setWxLayersExpanded={setWxLayersExpanded}
-        showRadar={showRadar}
-        setShowRadar={setShowRadar}
-        showSatelliteWx={showSatelliteWx}
-        setShowSatelliteWx={setShowSatelliteWx}
         showLightning={showLightning}
         setShowLightning={setShowLightning}
         showSigmet={showSigmet}
         setShowSigmet={setShowSigmet}
         setShowWxPanel={setShowWxPanel}
-        showAtcPanel={showAtcPanel}
-        setShowAtcPanel={setShowAtcPanel}
-        atcOnlyMode={atcOnlyMode}
-        setAtcOnlyMode={setAtcOnlyMode}
-        atcData={atcData}
-        selectedAtcSectors={selectedAtcSectors}
-        setSelectedAtcSectors={setSelectedAtcSectors}
-        atcExpanded={atcExpanded}
-        setAtcExpanded={setAtcExpanded}
-        radarRange={radarRange}
-        setRadarRange={setRadarRange}
-        radarBlackBackground={radarBlackBackground}
-        setRadarBlackBackground={setRadarBlackBackground}
-        map={map}
         showNotamPanel={showNotamPanel}
         setShowNotamPanel={setShowNotamPanel}
         notamData={notamData}
@@ -416,14 +398,14 @@ function App() {
         setNotamLocationFilter={setNotamLocationFilter}
         notamFilter={notamFilter}
         setNotamFilter={setNotamFilter}
-        notamExpanded={notamExpanded}
-        setNotamExpanded={setNotamExpanded}
+        notamExpanded={notamItemExpanded}
+        setNotamExpanded={setNotamItemExpanded}
         notamLocationsOnMap={notamLocationsOnMap}
         setNotamLocationsOnMap={setNotamLocationsOnMap}
         fetchNotamData={fetchNotamData}
       />
 
-      {/* Mobile Menu Toggle Button - 패널 열릴 때 숨김 */}
+      {/* Mobile Menu Toggle Button */}
       {!isPanelOpen && (
         <button
           className="mobile-menu-toggle"
@@ -433,6 +415,8 @@ function App() {
           ☰
         </button>
       )}
+
+      {/* Control Panel */}
       <div className={`control-panel ${isPanelOpen ? 'open' : 'closed'}`}>
         <div className="panel-header">
           <span className="panel-title">TBAS</span>
@@ -440,21 +424,107 @@ function App() {
         </div>
 
         <div className="panel-content">
-          {/* Altitude Legend */}
           <AltitudeLegend />
 
-          {/* Basic Layers - Accordion */}
-          <Accordion title="기본 레이어" expanded={layersExpanded} onToggle={() => setLayersExpanded(!layersExpanded)}>
+          {/* 울산공항 레이어 */}
+          <Accordion title="울산공항 (RKPU)" expanded={layersExpanded} onToggle={() => setLayersExpanded(!layersExpanded)}>
             <ToggleItem label="웨이포인트" checked={showWaypoints} onChange={setShowWaypoints} disabled={hasActiveProcedure} hint={hasActiveProcedure ? "(절차별)" : null} />
             <ToggleItem label="장애물" checked={showObstacles} onChange={setShowObstacles} />
             <ToggleItem label="공역" checked={showAirspace} onChange={setShowAirspace} />
             {is3DView && <ToggleItem label="3D 고도 표시" checked={show3DAltitude} onChange={setShow3DAltitude} />}
             {is3DView && <ToggleItem label="지형" checked={showTerrain} onChange={setShowTerrain} />}
-            {is3DView && <ToggleItem label="3D 건물" checked={showBuildings} onChange={setShowBuildings} />}
-            <ToggleItem label="기상 레이더" checked={showRadar} onChange={setShowRadar} />
+            {is3DView && <ToggleItem label="3D 건물" checked={showBuildings} onChange={(v) => useMapStore.getState().setShowBuildings(v)} />}
           </Accordion>
 
-          {/* Korea Routes/Waypoints/Airspaces - Accordion */}
+          {/* 관제구역 - ATC Sectors */}
+          <Accordion
+            title="관제구역"
+            expanded={showAtcPanel}
+            onToggle={() => setShowAtcPanel(!showAtcPanel)}
+            badge={selectedAtcSectors.size > 0 ? selectedAtcSectors.size : null}
+          >
+            {atcData && (
+              <>
+                {/* 레이더 뷰 토글 */}
+                <div className="toggle-item" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px', marginBottom: '8px' }}>
+                  <label className="toggle-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={atcOnlyMode} onChange={(e) => handleAtcModeToggle(e.target.checked)} />
+                    <span>레이더 뷰 ({radarRange}nm)</span>
+                  </label>
+                </div>
+
+                {atcOnlyMode && (
+                  <div style={{ marginBottom: '12px', padding: '8px', background: 'rgba(0,255,0,0.1)', borderRadius: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                      <span>범위</span>
+                      <span>{radarRange}nm</span>
+                    </div>
+                    <input type="range" min="50" max="500" step="50" value={radarRange} onChange={(e) => setRadarRange(parseInt(e.target.value))} style={{ width: '100%' }} />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', fontSize: '11px', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={radarBlackBackground} onChange={(e) => setRadarBlackBackground(e.target.checked)} />
+                      검은 배경
+                    </label>
+                  </div>
+                )}
+
+                {/* ACC/TMA/CTR 일괄 선택 */}
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+                  {['ACC', 'TMA', 'CTR'].map(type => (
+                    <button
+                      key={type}
+                      className={`mini-btn ${atcData[type].every(s => selectedAtcSectors.has(s.id)) ? 'active' : ''}`}
+                      onClick={() => toggleSectorGroup(atcData[type].map(s => s.id))}
+                    >
+                      {type} ({atcData[type].length})
+                    </button>
+                  ))}
+                </div>
+
+                {/* 섹터 목록 */}
+                {['ACC', 'TMA', 'CTR'].map(type => (
+                  <div key={type} style={{ marginBottom: '8px' }}>
+                    <div
+                      style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                      onClick={() => toggleAtcSection(type)}
+                    >
+                      <span>{type}</span>
+                      <span style={{ fontSize: '10px' }}>{atcExpanded[type] ? '▼' : '▶'}</span>
+                    </div>
+                    {atcExpanded[type] && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {atcData[type].map(s => (
+                          <label
+                            key={s.id}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 6px', fontSize: '10px',
+                              background: selectedAtcSectors.has(s.id) ? 'rgba(0,255,0,0.3)' : 'rgba(255,255,255,0.1)',
+                              borderRadius: '4px', cursor: 'pointer'
+                            }}
+                            title={s.name}
+                          >
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.color }}></span>
+                            <input
+                              type="checkbox"
+                              checked={selectedAtcSectors.has(s.id)}
+                              onChange={e => {
+                                const newSet = new Set(selectedAtcSectors);
+                                e.target.checked ? newSet.add(s.id) : newSet.delete(s.id);
+                                setSelectedAtcSectors(newSet);
+                              }}
+                              style={{ display: 'none' }}
+                            />
+                            <span>{s.name.split(' - ').pop().replace(/ (ACC|TMA|CTR)$/, '').substring(0, 8)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+          </Accordion>
+
+          {/* Korea Airspace Panel */}
           <KoreaAirspacePanel
             koreaAirspaceData={koreaAirspaceData}
             koreaRoutesExpanded={koreaRoutesExpanded}
@@ -469,7 +539,7 @@ function App() {
             setShowKoreaAirspaces={setShowKoreaAirspaces}
           />
 
-          {/* Aircraft - Accordion */}
+          {/* Aircraft Control Panel */}
           <AircraftControlPanel
             aircraftExpanded={aircraftExpanded}
             setAircraftExpanded={setAircraftExpanded}
@@ -529,6 +599,10 @@ function App() {
             toggleChart={toggleChart}
             chartOpacities={chartOpacities}
             updateChartOpacity={updateChartOpacity}
+            allChartBounds={allChartBounds}
+            selectedAirport={selectedChartAirport}
+            setSelectedAirport={setSelectedChartAirport}
+            map={map}
           />
 
           <div className="section">
@@ -537,7 +611,7 @@ function App() {
         </div>
       </div>
 
-      {/* Aircraft Detail Panel (FR24 Style) */}
+      {/* Aircraft Detail Panel */}
       <AircraftDetailPanel
         showAircraftPanel={showAircraftPanel}
         setShowAircraftPanel={setShowAircraftPanel}
@@ -567,7 +641,7 @@ function App() {
         AIRPORT_DATABASE={AIRPORT_DATABASE}
       />
 
-      {/* Right Weather Panel */}
+      {/* Weather Panel */}
       <WeatherPanel
         showWxPanel={showWxPanel}
         setShowWxPanel={setShowWxPanel}
