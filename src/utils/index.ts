@@ -89,6 +89,7 @@ export {
   extractDatesFromFullText,
   getNotamValidity,
   isNotamActive,
+  isNotamInPeriod,
   buildCancelledNotamSet,
   createNotamCircle,
 } from './notam';
@@ -112,3 +113,31 @@ export type {
   MetarData,
   ParsedMetar,
 } from './weather';
+
+// Fetch utilities
+export {
+  fetchWithTimeout,
+  fetchJson,
+  fetchWithRetry,
+} from './fetch';
+
+// Sanitization utilities
+export {
+  escapeHtml,
+  stripHtml,
+  sanitizeCallsign,
+  sanitizeNumeric,
+  isSafeUrl,
+  sanitizeUrl,
+} from './sanitize';
+
+// Logging utilities
+export {
+  logger,
+  LogLevel,
+  ErrorSeverity,
+  withTiming,
+  measureAsync,
+} from './logger';
+
+export type { LogEntry, LoggerOptions } from './logger';

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { NOTAM_CACHE_DURATION } from '../constants/config';
 import type { NotamItem, NotamData } from './useNotam';
+import { logger } from '../utils/logger';
 
 interface CacheEntry {
   data: NotamData;
@@ -26,7 +27,7 @@ const getNotamCache = (period: string): NotamData | null => {
 
   // 캐시가 유효한지 확인 (10분 이내)
   if (now - cached.timestamp < NOTAM_CACHE_DURATION) {
-    console.log(`NOTAM memory cache hit for period: ${period}, age: ${Math.round((now - cached.timestamp) / 1000)}s`);
+    logger.debug('NOTAM', `Memory cache hit for period: ${period}, age: ${Math.round((now - cached.timestamp) / 1000)}s`);
     return cached.data;
   }
 
@@ -40,7 +41,7 @@ const setNotamCache = (period: string, data: NotamData): void => {
     data,
     timestamp: Date.now()
   };
-  console.log(`NOTAM memory cache saved for period: ${period}, count: ${data?.data?.length || 0}`);
+  logger.debug('NOTAM', `Memory cache saved for period: ${period}, count: ${data?.data?.length || 0}`);
 };
 
 const getNotamCacheAge = (period: string): number | null => {
@@ -115,7 +116,7 @@ export default function useNotamData(showNotamPanel: boolean): UseNotamDataRetur
           throw new Error('Response is not JSON');
         }
       } catch (apiError) {
-        console.log('NOTAM API failed, trying local fallback:', (apiError as Error).message);
+        logger.debug('NOTAM', 'API failed, trying local fallback', { error: (apiError as Error).message });
         // Fallback to local mock data
         response = await fetch('/data/notams.json');
         usedFallback = true;
@@ -170,14 +171,14 @@ export default function useNotamData(showNotamPanel: boolean): UseNotamDataRetur
       // 2. 캐시에 저장
       if (usedFallback) {
         json.source = 'local-demo';
-        console.log('Using local demo NOTAM data');
+        logger.info('NOTAM', 'Using local demo data');
       }
       setNotamCache(period, json);
       setNotamCacheAge(0);
 
       setNotamData(json);
     } catch (e) {
-      console.error('NOTAM fetch failed:', e);
+      logger.error('NOTAM', 'Fetch failed', e as Error);
       setNotamError((e as Error).message);
 
       // 3. 네트워크 에러 시 만료된 메모리 캐시라도 사용 시도

@@ -78,15 +78,30 @@ export function useWeather(options: UseWeatherOptions = {}): UseWeatherReturn {
       setIsLoading(true);
       setError(null);
 
-      const [metarData, tafData, sigmetData, airmetData, upperWindData, llwsData] =
-        await Promise.all([
-          repositoryRef.current.fetchMetar(icao),
-          repositoryRef.current.fetchTaf(icao),
-          repositoryRef.current.fetchSigmet(),
-          repositoryRef.current.fetchAirmet(),
-          repositoryRef.current.fetchUpperWind(),
-          repositoryRef.current.fetchLlws(),
-        ]);
+      // Promise.allSettled로 부분 실패 허용 - 일부 데이터 실패해도 나머지 표시
+      const results = await Promise.allSettled([
+        repositoryRef.current.fetchMetar(icao),
+        repositoryRef.current.fetchTaf(icao),
+        repositoryRef.current.fetchSigmet(),
+        repositoryRef.current.fetchAirmet(),
+        repositoryRef.current.fetchUpperWind(),
+        repositoryRef.current.fetchLlws(),
+      ]);
+
+      const metarData = results[0].status === 'fulfilled' ? results[0].value : null;
+      const tafData = results[1].status === 'fulfilled' ? results[1].value : null;
+      const sigmetData = results[2].status === 'fulfilled' ? results[2].value : [];
+      const airmetData = results[3].status === 'fulfilled' ? results[3].value : [];
+      const upperWindData = results[4].status === 'fulfilled' ? results[4].value : null;
+      const llwsData = results[5].status === 'fulfilled' ? results[5].value : [];
+
+      // 실패한 요청 로깅
+      results.forEach((result, idx) => {
+        if (result.status === 'rejected') {
+          const names = ['METAR', 'TAF', 'SIGMET', 'AIRMET', 'Upper Wind', 'LLWS'];
+          console.warn(`${names[idx]} fetch failed:`, result.reason);
+        }
+      });
 
       setMetar(metarData);
       setTaf(tafData);

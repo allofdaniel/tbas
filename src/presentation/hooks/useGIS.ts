@@ -117,11 +117,21 @@ export function useGIS(options: UseGISOptions = {}): UseGISReturn {
       setIsLoading(true);
       setError(null);
 
-      const [aviationData, obstacleData, runwayData] = await Promise.all([
+      // Promise.allSettled로 부분 실패 허용
+      const results = await Promise.allSettled([
         repositoryRef.current.loadAviationData(airport),
         repositoryRef.current.getObstacles(),
         repositoryRef.current.getRunways(),
       ]);
+
+      const aviationData = results[0].status === 'fulfilled' ? results[0].value : null;
+      const obstacleData = results[1].status === 'fulfilled' ? results[1].value : [];
+      const runwayData = results[2].status === 'fulfilled' ? results[2].value : [];
+
+      // 실패한 요청 로깅
+      if (results[0].status === 'rejected') console.warn('Aviation data load failed:', results[0].reason);
+      if (results[1].status === 'rejected') console.warn('Obstacles load failed:', results[1].reason);
+      if (results[2].status === 'rejected') console.warn('Runways load failed:', results[2].reason);
 
       if (aviationData) {
         setWaypoints(aviationData.waypoints);

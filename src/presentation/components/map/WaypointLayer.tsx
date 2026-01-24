@@ -5,8 +5,11 @@
  * 웨이포인트 표시 레이어
  */
 
+/* eslint-disable react-hooks/exhaustive-deps */
+// Mapbox GL dependencies are intentionally excluded from useEffect deps
+
 import { useEffect, useCallback } from 'react';
-import mapboxgl from 'mapbox-gl';
+import type { MapLayerMouseEvent, GeoJSONSource } from 'mapbox-gl';
 import { useMapContext } from '../../contexts/MapContext';
 import type { Waypoint } from '@/types';
 
@@ -138,10 +141,11 @@ export function WaypointLayer({
     }
 
     // 클릭 이벤트
-    const handleClick = (e: mapboxgl.MapLayerMouseEvent) => {
+    const handleClick = (e: MapLayerMouseEvent) => {
       const features = e.features;
-      if (features && features.length > 0) {
-        const id = features[0].properties?.id;
+      const feature = features?.[0];
+      if (feature) {
+        const id = feature.properties?.id;
         if (id) {
           const newId = id === selectedId ? null : id;
           selectWaypoint(newId);
@@ -172,7 +176,7 @@ export function WaypointLayer({
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    const source = map.getSource(WAYPOINT_SOURCE_ID) as mapboxgl.GeoJSONSource;
+    const source = map.getSource(WAYPOINT_SOURCE_ID) as GeoJSONSource;
     if (source) {
       source.setData(createGeoJSON(waypoints));
     }

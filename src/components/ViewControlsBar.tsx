@@ -93,21 +93,44 @@ const WeatherDropdown: React.FC<WeatherDropdownProps> = ({
       className={`view-btn ${wxLayersExpanded ? 'active' : ''}`}
       onClick={() => setWxLayersExpanded(!wxLayersExpanded)}
       title="기상정보"
+      aria-label="기상정보 메뉴"
+      aria-expanded={wxLayersExpanded}
+      aria-haspopup="menu"
     >
       기상
     </button>
     {wxLayersExpanded && (
-      <div className="wx-dropdown">
-        <div className={`wx-dropdown-item ${showLightning ? 'active' : ''}`} onClick={() => setShowLightning(!showLightning)}>
-          <input type="checkbox" checked={showLightning} readOnly />
+      <div className="wx-dropdown" role="menu" aria-label="기상 레이어 선택">
+        <div
+          className={`wx-dropdown-item ${showLightning ? 'active' : ''}`}
+          onClick={() => setShowLightning(!showLightning)}
+          role="menuitemcheckbox"
+          aria-checked={showLightning}
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowLightning(!showLightning); }}}
+        >
+          <input type="checkbox" checked={showLightning} readOnly tabIndex={-1} aria-hidden="true" />
           <span>낙뢰</span>
         </div>
-        <div className={`wx-dropdown-item ${showSigmet ? 'active' : ''}`} onClick={() => setShowSigmet(!showSigmet)}>
-          <input type="checkbox" checked={showSigmet} readOnly />
+        <div
+          className={`wx-dropdown-item ${showSigmet ? 'active' : ''}`}
+          onClick={() => setShowSigmet(!showSigmet)}
+          role="menuitemcheckbox"
+          aria-checked={showSigmet}
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowSigmet(!showSigmet); }}}
+        >
+          <input type="checkbox" checked={showSigmet} readOnly tabIndex={-1} aria-hidden="true" />
           <span>SIGMET</span>
         </div>
-        <div className="wx-dropdown-divider"></div>
-        <div className="wx-dropdown-item" onClick={() => setShowWxPanel(true)}>
+        <div className="wx-dropdown-divider" role="separator"></div>
+        <div
+          className="wx-dropdown-item"
+          onClick={() => setShowWxPanel(true)}
+          role="menuitem"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowWxPanel(true); }}}
+        >
           <span>상세 기상정보 ▶</span>
         </div>
       </div>
@@ -118,8 +141,9 @@ const WeatherDropdown: React.FC<WeatherDropdownProps> = ({
 /**
  * View Controls Bar Component
  * 관제 패널은 좌측 패널로 이동됨
+ * DO-278A 요구사항 추적: SRS-PERF-003
  */
-const ViewControlsBar: React.FC<ViewControlsBarProps> = ({
+const ViewControlsBar: React.FC<ViewControlsBarProps> = React.memo(({
   // 2D/3D Toggle
   is3DView,
   setIs3DView,
@@ -157,13 +181,15 @@ const ViewControlsBar: React.FC<ViewControlsBarProps> = ({
   fetchNotamData
 }) => {
   return (
-    <div className="view-controls">
-      <button className={`view-btn ${is3DView ? 'active' : ''}`} onClick={() => setIs3DView(true)}>3D</button>
-      <button className={`view-btn ${!is3DView ? 'active' : ''}`} onClick={() => setIs3DView(false)}>2D</button>
+    <div className="view-controls" role="toolbar" aria-label="지도 뷰 컨트롤">
+      <button className={`view-btn ${is3DView ? 'active' : ''}`} onClick={() => setIs3DView(true)} aria-pressed={is3DView} aria-label="3D 보기">3D</button>
+      <button className={`view-btn ${!is3DView ? 'active' : ''}`} onClick={() => setIs3DView(false)} aria-pressed={!is3DView} aria-label="2D 보기">2D</button>
       <button
         className="view-btn icon-btn"
         onClick={() => setIsDarkMode(!isDarkMode)}
         title={isDarkMode ? '라이트 모드' : '다크 모드'}
+        aria-label={isDarkMode ? '라이트 모드로 전환' : '다크 모드로 전환'}
+        aria-pressed={isDarkMode}
       >
         {isDarkMode ? '🌙' : '☀️'}
       </button>
@@ -171,6 +197,8 @@ const ViewControlsBar: React.FC<ViewControlsBarProps> = ({
         className={`view-btn icon-btn ${showSatellite ? 'active' : ''}`}
         onClick={() => setShowSatellite(!showSatellite)}
         title="위성 사진"
+        aria-label="위성 사진 표시"
+        aria-pressed={showSatellite}
       >
         🛰️
       </button>
@@ -206,6 +234,7 @@ const ViewControlsBar: React.FC<ViewControlsBarProps> = ({
       />
     </div>
   );
-};
+});
+ViewControlsBar.displayName = 'ViewControlsBar';
 
 export default ViewControlsBar;

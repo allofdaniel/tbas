@@ -85,7 +85,8 @@ export default function useAircraftVisualization(
         lon + (x * cos - y * sin),
         lat + (x * sin + y * cos)
       ]);
-      rotated.push(rotated[0]);
+      const first = rotated[0];
+      if (first) rotated.push(first);
       return [rotated];
     };
 
@@ -287,6 +288,7 @@ export default function useAircraftVisualization(
 
           const p1 = extendedTrail[i];
           const p2 = extendedTrail[i + 1];
+          if (!p1 || !p2) continue;
           // 세그먼트의 중간 시간으로 opacity 계산
           const segTime = (p1.timestamp + p2.timestamp) / 2;
           const age = now - segTime;

@@ -5,6 +5,9 @@
  * 공역 폴리곤 표시 레이어
  */
 
+/* eslint-disable react-hooks/exhaustive-deps */
+// Mapbox GL dependencies are intentionally excluded from useEffect deps
+
 import { useEffect, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { useMapContext } from '../../contexts/MapContext';
@@ -52,36 +55,41 @@ export function AirspaceLayer({
    */
   const createGeoJSON = useCallback(
     (airspaceList: Airspace[]): GeoJSON.FeatureCollection => {
+      const features = airspaceList
+        .filter((as) => as.polygon && as.polygon.length >= 3)
+        .map((as) => {
+          const colors = AIRSPACE_COLORS[as.type] || AIRSPACE_COLORS.default;
+          const polygon = as.polygon!;
+          const firstPoint = polygon[0];
+          if (!firstPoint || !colors) return null;
+          return {
+            type: 'Feature' as const,
+            geometry: {
+              type: 'Polygon' as const,
+              coordinates: [
+                [
+                  ...polygon.map((p) => [p.lon, p.lat]),
+                  [firstPoint.lon, firstPoint.lat], // Close the polygon
+                ],
+              ],
+            },
+            properties: {
+              id: as.id,
+              name: as.name,
+              type: as.type,
+              class: as.class,
+              lowerLimit: as.lowerLimit,
+              upperLimit: as.upperLimit,
+              fillColor: colors.fill,
+              lineColor: colors.line,
+            },
+          };
+        })
+        .filter((f): f is NonNullable<typeof f> => f !== null);
+
       return {
         type: 'FeatureCollection',
-        features: airspaceList
-          .filter((as) => as.polygon && as.polygon.length >= 3)
-          .map((as) => {
-            const colors = AIRSPACE_COLORS[as.type] || AIRSPACE_COLORS.default;
-            const polygon = as.polygon!;
-            return {
-              type: 'Feature',
-              geometry: {
-                type: 'Polygon',
-                coordinates: [
-                  [
-                    ...polygon.map((p) => [p.lon, p.lat]),
-                    [polygon[0].lon, polygon[0].lat], // Close the polygon
-                  ],
-                ],
-              },
-              properties: {
-                id: as.id,
-                name: as.name,
-                type: as.type,
-                class: as.class,
-                lowerLimit: as.lowerLimit,
-                upperLimit: as.upperLimit,
-                fillColor: colors.fill,
-                lineColor: colors.line,
-              },
-            };
-          }),
+        features,
       };
     },
     []
@@ -186,8 +194,10 @@ export function AirspaceLayer({
     const handleMouseEnter = (e: mapboxgl.MapLayerMouseEvent) => {
       const features = e.features;
       if (!features || features.length === 0) return;
+      const feature = features[0];
+      if (!feature) return;
 
-      const props = features[0].properties;
+      const props = feature.properties;
       if (!props) return;
 
       const content = `

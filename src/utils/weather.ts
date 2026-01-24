@@ -108,6 +108,13 @@ export const formatUTC = (date: Date): string => date.toISOString().slice(11, 19
 
 /**
  * KST (한국 표준시) 시간 포맷
+ * toLocaleString 사용으로 정확한 timezone 변환
  */
 export const formatKST = (date: Date): string =>
-  new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(11, 19) + 'L';
+  date.toLocaleTimeString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }) + 'L';

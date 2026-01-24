@@ -57,14 +57,16 @@ interface TimeWeatherBarProps {
 
 /**
  * Time Display
+ * DO-278A 요구사항 추적: SRS-PERF-001
  */
-const TimeDisplay: React.FC<TimeDisplayProps> = ({ currentTime }) => (
+const TimeDisplay: React.FC<TimeDisplayProps> = React.memo(({ currentTime }) => (
   <div className="time-display">
     <span className="time-utc">{formatUTC(currentTime)}</span>
     <span className="time-separator">|</span>
     <span className="time-kst">{formatKST(currentTime)}</span>
   </div>
-);
+));
+TimeDisplay.displayName = 'TimeDisplay';
 
 /**
  * Weather Compact Display
@@ -179,8 +181,9 @@ const TafPopup: React.FC<TafPopupProps> = ({ weatherData, showTafPopup, tafPinne
 
 /**
  * Time Weather Bar Component
+ * DO-278A 요구사항 추적: SRS-PERF-001
  */
-const TimeWeatherBar: React.FC<TimeWeatherBarProps> = ({
+const TimeWeatherBar: React.FC<TimeWeatherBarProps> = React.memo(({
   currentTime,
   weatherData,
   showMetarPopup,
@@ -221,6 +224,7 @@ const TimeWeatherBar: React.FC<TimeWeatherBarProps> = ({
       />
     </div>
   );
-};
+});
+TimeWeatherBar.displayName = 'TimeWeatherBar';
 
 export default TimeWeatherBar;

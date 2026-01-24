@@ -223,29 +223,7 @@ export class GISRepository implements IGISRepository {
     return this.apiClient.getRunways();
   }
 
-  /**
-   * 폴리곤 중심점 계산
-   */
-  private calculatePolygonCenter(polygon?: Coordinate[]): Coordinate {
-    if (!polygon || polygon.length === 0) {
-      return { lat: 0, lon: 0 };
-    }
-
-    const sum = polygon.reduce(
-      (acc, point) => ({
-        lat: acc.lat + point.lat,
-        lon: acc.lon + point.lon,
-      }),
-      { lat: 0, lon: 0 }
-    );
-
-    return {
-      lat: sum.lat / polygon.length,
-      lon: sum.lon / polygon.length,
-    };
-  }
-
-  /**
+/**
    * 캐시 클리어
    */
   clearCache(): void {

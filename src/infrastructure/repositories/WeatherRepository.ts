@@ -42,6 +42,7 @@ export class WeatherRepository implements IWeatherRepository {
 
     // API 응답을 MetarData로 변환
     const metar = metars[0];
+    if (!metar) return null;
     return {
       icaoId: metar.icao || icao,
       obsTime: metar.obsTime || new Date().toISOString(),
@@ -64,6 +65,7 @@ export class WeatherRepository implements IWeatherRepository {
     if (!tafs || tafs.length === 0) return null;
 
     const taf = tafs[0];
+    if (!taf) return null;
     return {
       icaoId: taf.icao || icao,
       rawTAF: taf.rawTaf || '',

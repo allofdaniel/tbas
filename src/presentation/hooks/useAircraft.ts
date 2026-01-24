@@ -88,6 +88,7 @@ export function useAircraft(options: UseAircraftOptions): UseAircraftReturn {
     } finally {
       setIsLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateTrails is stable (only depends on trailDuration)
   }, [center, radiusNM]);
 
   /**
@@ -185,11 +186,25 @@ export function useAircraft(options: UseAircraftOptions): UseAircraftReturn {
   }, [autoUpdate, updateInterval, refreshAircraft]);
 
   /**
-   * 중심점 변경 시 항적 초기화
+   * 중심점 변경 시 항적 초기화 및 인터벌 재시작
+   * Race condition 방지: 이전 인터벌이 새 위치 데이터와 섞이지 않도록
    */
   useEffect(() => {
+    // 기존 인터벌 중지
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // 항적 초기화
     clearTrails();
-  }, [center.lat, center.lon, clearTrails]);
+
+    // 새 위치에서 인터벌 재시작 (autoUpdate가 true인 경우)
+    if (autoUpdate) {
+      refreshAircraft();
+      intervalRef.current = setInterval(refreshAircraft, updateInterval);
+    }
+  }, [center.lat, center.lon, clearTrails, autoUpdate, refreshAircraft, updateInterval]);
 
   return {
     aircraft,

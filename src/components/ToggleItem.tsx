@@ -13,7 +13,7 @@ interface ToggleItemProps {
   count?: number;
 }
 
-const ToggleItem: React.FC<ToggleItemProps> = ({
+const ToggleItem: React.FC<ToggleItemProps> = React.memo(({
   label,
   checked,
   onChange,
@@ -21,16 +21,26 @@ const ToggleItem: React.FC<ToggleItemProps> = ({
   hint,
   count
 }) => {
-  const handleClick = (): void => {
+  const handleClick = React.useCallback((): void => {
     if (!disabled && onChange) {
       onChange(!checked);
     }
-  };
+  }, [disabled, onChange, checked]);
 
   return (
     <div
       className={`toggle-item ${checked && !disabled ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
       onClick={handleClick}
+      role="checkbox"
+      aria-checked={checked && !disabled}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
     >
       <input
         type="checkbox"
@@ -38,6 +48,8 @@ const ToggleItem: React.FC<ToggleItemProps> = ({
         checked={checked && !disabled}
         readOnly
         disabled={disabled}
+        tabIndex={-1}
+        aria-hidden="true"
       />
       <span className="toggle-label">
         {label}
@@ -46,6 +58,8 @@ const ToggleItem: React.FC<ToggleItemProps> = ({
       {count !== undefined && <span className="toggle-count">{count}</span>}
     </div>
   );
-};
+});
+
+ToggleItem.displayName = 'ToggleItem';
 
 export default ToggleItem;

@@ -5,7 +5,7 @@
  * AIP 차트 선택 및 표시 패널
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { getKoreanAirports, AIRPORT_COORDINATES } from '@/config/airports';
 import type { ChartData } from '@/presentation/components/map/ChartLayer';
 
@@ -42,7 +42,7 @@ export function ChartPanel({
   chartOpacity,
   onOpacityChange,
   charts,
-  onChartToggle,
+  onChartToggle: _onChartToggle,
 }: ChartPanelProps) {
   const koreanAirports = getKoreanAirports();
 

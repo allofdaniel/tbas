@@ -32,10 +32,14 @@ const useChartOverlay = (
 
     const safeRemove = (type: 'Layer' | 'Source', id: string): void => {
       try {
+        const mapInstance = map.current as unknown as Record<string, (id: string) => unknown> | undefined;
+        if (!mapInstance) return;
         const method = type === 'Layer' ? 'getLayer' : 'getSource';
         const removeMethod = type === 'Layer' ? 'removeLayer' : 'removeSource';
-        if ((map.current as unknown as Record<string, (id: string) => unknown>)?.[method](id)) {
-          (map.current as unknown as Record<string, (id: string) => void>)?.[removeMethod](id);
+        const getterFn = mapInstance[method];
+        const removerFn = mapInstance[removeMethod] as ((id: string) => void) | undefined;
+        if (getterFn && typeof getterFn === 'function' && getterFn(id) && removerFn && typeof removerFn === 'function') {
+          removerFn(id);
         }
       } catch { /* ignore */ }
     };

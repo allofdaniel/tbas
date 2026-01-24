@@ -90,9 +90,9 @@ const RunwayGroup: React.FC<RunwayGroupProps> = ({ label, procedures, visible, o
         key={key}
         procedureKey={key}
         procedure={proc}
-        visible={visible[key]}
+        visible={visible[key] ?? false}
         onToggle={(k) => onToggle(prev => ({ ...prev, [k]: !prev[k] }))}
-        color={colors[key]}
+        color={colors[key] ?? '#ffffff'}
       />
     ))}
   </div>
@@ -313,7 +313,8 @@ export const ChartOverlayPanel: React.FC<ChartOverlayPanelProps> = ({
 
     charts.forEach(([chartId, chartData]) => {
       const baseName = chartData.name || chartId;
-      if (nameCounts[baseName] > 1 && !chartData.displayName?.includes('(')) {
+      const count = nameCounts[baseName];
+      if (count !== undefined && count > 1 && !chartData.displayName?.includes('(')) {
         chartData.displayName = `${baseName} (1)`;
       }
     });
@@ -337,10 +338,14 @@ export const ChartOverlayPanel: React.FC<ChartOverlayPanelProps> = ({
     if (charts && map?.current) {
       const firstChart = Object.values(charts)[0];
       if (firstChart?.bounds) {
-        const [nw, ne, , ] = firstChart.bounds;
-        const centerLon = (nw[0] + ne[0]) / 2;
-        const centerLat = (nw[1] + firstChart.bounds[2][1]) / 2;
-        map.current.flyTo({ center: [centerLon, centerLat], zoom: 12, duration: 1500 });
+        const nw = firstChart.bounds[0];
+        const ne = firstChart.bounds[1];
+        const sw = firstChart.bounds[2];
+        if (nw && ne && sw) {
+          const centerLon = (nw[0] + ne[0]) / 2;
+          const centerLat = (nw[1] + sw[1]) / 2;
+          map.current.flyTo({ center: [centerLon, centerLat], zoom: 12, duration: 1500 });
+        }
       }
     }
   };

@@ -5,7 +5,7 @@
  * 항공기 데이터 공유를 위한 React Context
  */
 
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useCallback } from 'react';
 import type { AircraftPosition, AircraftTrailPoint, Coordinate } from '@/types';
 import { useAircraft } from '../hooks/useAircraft';
 import { DEFAULT_MAP_CENTER, AIRCRAFT_UPDATE_INTERVAL, DEFAULT_TRAIL_DURATION } from '@/config/constants';
@@ -64,13 +64,13 @@ export function AircraftProvider({
     autoUpdate,
   });
 
-  const getAircraftByHex = (hex: string): AircraftPosition | undefined => {
+  const getAircraftByHex = useCallback((hex: string): AircraftPosition | undefined => {
     return aircraft.find((ac) => ac.hex === hex);
-  };
+  }, [aircraft]);
 
-  const getTrailByHex = (hex: string): AircraftTrailPoint[] | undefined => {
+  const getTrailByHex = useCallback((hex: string): AircraftTrailPoint[] | undefined => {
     return trails.get(hex);
-  };
+  }, [trails]);
 
   const value = useMemo<AircraftContextValue>(
     () => ({
@@ -86,7 +86,7 @@ export function AircraftProvider({
       getAircraftByHex,
       getTrailByHex,
     }),
-    [aircraft, selectedAircraft, trails, isLoading, error, lastUpdate, selectAircraft, refreshAircraft, clearTrails]
+    [aircraft, selectedAircraft, trails, isLoading, error, lastUpdate, selectAircraft, refreshAircraft, clearTrails, getAircraftByHex, getTrailByHex]
   );
 
   return (

@@ -5,8 +5,12 @@
  * 지도 위 항공기 표시 레이어
  */
 
+/* eslint-disable react-hooks/exhaustive-deps */
+// Mapbox GL dependencies are intentionally excluded from useEffect deps
+// to prevent infinite re-renders. Map refs are stable and don't change.
+
 import { useEffect, useCallback } from 'react';
-import mapboxgl from 'mapbox-gl';
+import type { Expression, MapLayerMouseEvent, GeoJSONSource } from 'mapbox-gl';
 import { useMapContext } from '../../contexts/MapContext';
 import { useAircraftContext } from '../../contexts/AircraftContext';
 import type { AircraftPosition } from '@/types';
@@ -166,7 +170,7 @@ export function AircraftLayer({
             16,
             12,
           ],
-          'circle-color': getColorExpression() as any,
+          'circle-color': getColorExpression() as Expression,
           'circle-stroke-width': [
             'case',
             ['get', 'isSelected'],
@@ -206,10 +210,11 @@ export function AircraftLayer({
     }
 
     // 클릭 이벤트
-    const handleClick = (e: mapboxgl.MapLayerMouseEvent) => {
+    const handleClick = (e: MapLayerMouseEvent) => {
       const features = e.features;
-      if (features && features.length > 0) {
-        const hex = features[0].properties?.hex;
+      const feature = features?.[0];
+      if (feature) {
+        const hex = feature.properties?.hex;
         if (hex) {
           selectAircraft(hex === selectedAircraftHex ? null : hex);
         }
@@ -219,16 +224,22 @@ export function AircraftLayer({
     map.on('click', AIRCRAFT_LAYER_ID, handleClick);
 
     // 커서 변경
-    map.on('mouseenter', AIRCRAFT_LAYER_ID, () => {
+    const handleMouseEnter = () => {
       map.getCanvas().style.cursor = 'pointer';
-    });
+    };
 
-    map.on('mouseleave', AIRCRAFT_LAYER_ID, () => {
+    const handleMouseLeave = () => {
       map.getCanvas().style.cursor = '';
-    });
+    };
 
+    map.on('mouseenter', AIRCRAFT_LAYER_ID, handleMouseEnter);
+    map.on('mouseleave', AIRCRAFT_LAYER_ID, handleMouseLeave);
+
+    // DO-278A: 모든 이벤트 리스너 정리 (메모리 누수 방지)
     return () => {
       map.off('click', AIRCRAFT_LAYER_ID, handleClick);
+      map.off('mouseenter', AIRCRAFT_LAYER_ID, handleMouseEnter);
+      map.off('mouseleave', AIRCRAFT_LAYER_ID, handleMouseLeave);
     };
   }, [isMapLoaded, showLabels, minZoom, getColorExpression, selectAircraft, selectedAircraftHex]);
 
@@ -239,7 +250,7 @@ export function AircraftLayer({
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    const source = map.getSource(AIRCRAFT_SOURCE_ID) as mapboxgl.GeoJSONSource;
+    const source = map.getSource(AIRCRAFT_SOURCE_ID) as GeoJSONSource;
     if (source) {
       source.setData(createGeoJSON(aircraft));
     }

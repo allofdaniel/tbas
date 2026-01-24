@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { AIRPORT_DATABASE } from '../constants/airports';
 import { ICAO_TO_IATA } from '../constants/aircraft';
+import { AIRPORT_ICAO_TO_IATA } from '../constants/airports';
 import type { AircraftData } from './useAircraftData';
+import { logger } from '../utils/logger';
 
 export interface AircraftPhoto {
   image: string;
@@ -135,12 +137,13 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
         }
         setAircraftPhotoLoading(false);
       } catch (err) {
-        console.warn('Failed to fetch aircraft photo:', err);
+        logger.warn('Aircraft', 'Failed to fetch aircraft photo', { error: (err as Error).message });
         setAircraftPhotoLoading(false);
       }
     };
 
     fetchPhoto();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: only re-fetch when hex changes
   }, [selectedAircraft?.hex]);
 
   // Fetch aircraft details from hexdb.io when selectedAircraft changes
@@ -164,13 +167,14 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
           setAircraftDetails(data);
         }
       } catch (err) {
-        console.warn('Failed to fetch aircraft details from hexdb.io:', err);
+        logger.warn('Aircraft', 'Failed to fetch aircraft details from hexdb.io', { error: (err as Error).message });
       } finally {
         setAircraftDetailsLoading(false);
       }
     };
 
     fetchDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: only re-fetch when hex changes
   }, [selectedAircraft?.hex]);
 
   // Fetch flight route from FlightRadar24 (primary) or aviationstack (fallback)
@@ -188,18 +192,13 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
     setFlightSchedule(null);
 
     const fetchSchedule = async () => {
-      // ICAO to IATA 변환 맵 (UBIKAIS 데이터용)
+      // ICAO to IATA 변환 맵 (공통 매핑 사용 + 추가 공항)
       const icaoToIata: Record<string, string> = {
-        'RKSI': 'ICN', 'RKSS': 'GMP', 'RKPK': 'PUS', 'RKPC': 'CJU',
-        'RKPU': 'USN', 'RKTN': 'TAE', 'RKTU': 'CJJ', 'RKJB': 'MWX',
-        'RKNY': 'YNY', 'RKJY': 'RSU', 'RKPS': 'HIN', 'RKTH': 'KPO',
-        'RJTT': 'HND', 'RJAA': 'NRT', 'RJBB': 'KIX', 'RJOO': 'ITM',
-        'RJFF': 'FUK', 'RJCC': 'CTS', 'VHHH': 'HKG', 'RCTP': 'TPE',
-        'WSSS': 'SIN', 'VTBS': 'BKK', 'WMKK': 'KUL', 'RPLL': 'MNL',
-        'ZGGG': 'CAN', 'ZSPD': 'PVG', 'ZSSS': 'SHA', 'ZBAA': 'PEK',
-        'VVTS': 'SGN', 'VVNB': 'HAN', 'VVCR': 'CXR', 'VVDN': 'DAD', 'VVPQ': 'PQC',
+        ...AIRPORT_ICAO_TO_IATA,
+        // 추가 공항 (공통 매핑에 없는 것들)
+        'RPLL': 'MNL', 'VVCR': 'CXR', 'VVDN': 'DAD', 'VVPQ': 'PQC',
         'OMDB': 'DXB', 'OTHH': 'DOH', 'HAAB': 'ADD', 'LTFM': 'IST',
-        'KLAX': 'LAX', 'KJFK': 'JFK', 'KORD': 'ORD', 'KCVG': 'CVG', 'PANC': 'ANC',
+        'KORD': 'ORD', 'KCVG': 'CVG', 'PANC': 'ANC',
         'EDDF': 'FRA', 'EDDP': 'LEJ', 'EBBR': 'BRU', 'LIMC': 'MXP',
         'ZMCK': 'UBN', 'WBKK': 'BKI', 'ZSYT': 'YNT'
       };
@@ -240,7 +239,7 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
                 if (!etaStr) return false;
                 // "오후 02:26" 같은 형식 파싱
                 const match = etaStr.match(/(오전|오후)\s*(\d{1,2}):(\d{2})/);
-                if (!match) return false;
+                if (!match || !match[1] || !match[2] || !match[3]) return false;
                 let hour = parseInt(match[2]);
                 const minute = parseInt(match[3]);
                 if (match[1] === '오후' && hour !== 12) hour += 12;
@@ -259,7 +258,7 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
               };
 
               if (isStaleSchedule()) {
-                console.log('UBIKAIS: Stale schedule detected (past ETA), skipping:', matchedFlight.flight_number);
+                logger.debug('FlightSchedule', 'UBIKAIS: Stale schedule detected (past ETA), skipping', { flight: matchedFlight.flight_number });
               } else {
                 const originIcao = matchedFlight.origin as string;
                 const destIcao = matchedFlight.destination as string;
@@ -293,13 +292,13 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
                   _lastUpdated: ubikaisData.last_updated
                 });
                 setFlightScheduleLoading(false);
-                console.log('UBIKAIS match found:', matchedFlight.flight_number);
+                logger.info('FlightSchedule', 'UBIKAIS match found', { flight: matchedFlight.flight_number });
                 return;
               }
             }
           }
         } catch (e) {
-          console.warn('UBIKAIS static JSON search error:', (e as Error).message);
+          logger.warn('FlightSchedule', 'UBIKAIS static JSON search error', { error: (e as Error).message });
         }
 
         // 2차: UBIKAIS + FlightRadar24 통합 API로 출발/도착 정보 가져오기
@@ -336,7 +335,7 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
 
             const scheduleData = isStaleSchedule() ? null : routeData.schedule;
             if (isStaleSchedule()) {
-              console.log('FR24: Stale schedule detected (past ETA), removing time data');
+              logger.debug('FlightSchedule', 'FR24: Stale schedule detected (past ETA), removing time data');
             }
 
             setFlightSchedule({
@@ -369,7 +368,7 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
           const icaoMatch = callsign.match(/^([A-Z]{3})(\d+)/);
           let flightNumber = callsign;
 
-          if (icaoMatch) {
+          if (icaoMatch && icaoMatch[1] && icaoMatch[2]) {
             const icaoCode = icaoMatch[1];
             const number = icaoMatch[2];
             const iataCode = ICAO_TO_IATA[icaoCode];
@@ -387,13 +386,14 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
           }
         }
       } catch (err) {
-        console.warn('Failed to fetch flight schedule:', err);
+        logger.warn('FlightSchedule', 'Failed to fetch flight schedule', { error: (err as Error).message });
       } finally {
         setFlightScheduleLoading(false);
       }
     };
 
     fetchSchedule();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: only re-fetch when specific props change
   }, [selectedAircraft?.hex, selectedAircraft?.callsign, AVIATIONSTACK_API_KEY]);
 
   // Fetch flight track from OpenSky Trino (full history) or REST API (fallback)
@@ -412,11 +412,10 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
     const fetchTrack = async () => {
       try {
         // 1차: OpenSky Trino API (전체 비행 이력 - 이륙부터 착륙까지)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
         try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-          console.log(`[FlightTrack] Fetching Trino data for ${hex}...`);
+          logger.debug('FlightTrack', `Fetching Trino data for ${hex}`);
           const trinoRes = await fetch(`/api/opensky-history?icao24=${hex}&hours=24`, {
             signal: controller.signal
           });
@@ -424,12 +423,12 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
 
           if (trinoRes.ok) {
             const trinoData = await trinoRes.json();
-            console.log(`[FlightTrack] Trino response:`, trinoData);
+            logger.debug('FlightTrack', 'Trino response received', { dataKeys: Object.keys(trinoData) });
             if (trinoData.path && trinoData.path.length > 0) {
-              console.log(`[FlightTrack] ✅ Trino: ${trinoData.path.length} points (sampled from ${trinoData.totalPoints})`);
+              logger.info('FlightTrack', `Trino: ${trinoData.path.length} points (sampled from ${trinoData.totalPoints})`);
               const firstPt = trinoData.path[0];
               const lastPt = trinoData.path[trinoData.path.length - 1];
-              console.log(`[FlightTrack] Time range: ${new Date(firstPt.time * 1000).toLocaleString()} ~ ${new Date(lastPt.time * 1000).toLocaleString()}`);
+              logger.debug('FlightTrack', `Time range: ${new Date(firstPt.time * 1000).toLocaleString()} ~ ${new Date(lastPt.time * 1000).toLocaleString()}`);
               setFlightTrack({
                 icao24: trinoData.icao24,
                 callsign: trinoData.path[0]?.callsign,
@@ -441,28 +440,30 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
               setFlightTrackLoading(false);
               return;
             } else {
-              console.warn(`[FlightTrack] Trino returned empty path, error: ${trinoData.error || 'none'}`);
+              logger.warn('FlightTrack', `Trino returned empty path`, { error: trinoData.error || 'none' });
             }
           } else {
             const errText = await trinoRes.text();
-            console.warn(`[FlightTrack] Trino API error ${trinoRes.status}: ${errText}`);
+            logger.warn('FlightTrack', `Trino API error`, { status: trinoRes.status, error: errText });
           }
         } catch (trinoErr) {
+          // 에러 발생 시에도 timeout 정리
+          clearTimeout(timeoutId);
           if ((trinoErr as Error).name === 'AbortError') {
-            console.warn('[FlightTrack] Trino API timeout (5s), falling back to REST API');
+            logger.warn('FlightTrack', 'Trino API timeout (5s), falling back to REST API');
           } else {
-            console.warn('[FlightTrack] Trino API failed:', (trinoErr as Error).message);
+            logger.warn('FlightTrack', 'Trino API failed', { error: (trinoErr as Error).message });
           }
         }
 
         // 2차: OpenSky REST tracks API (제한된 데이터)
-        console.log(`[FlightTrack] Falling back to OpenSky REST API for ${hex}...`);
+        logger.debug('FlightTrack', `Falling back to OpenSky REST API for ${hex}`);
         const res = await fetch(
           `https://opensky-network.org/api/tracks/all?icao24=${hex}&time=0`
         );
         if (res.ok) {
           const data = await res.json();
-          console.log(`[FlightTrack] OpenSky REST response:`, data);
+          logger.debug('FlightTrack', 'OpenSky REST response received', { pathLength: data?.path?.length || 0 });
           if (data && data.path && data.path.length > 0) {
             const trackData: FlightTrackPoint[] = data.path.map((p: number[]) => ({
               time: p[0],
@@ -472,8 +473,12 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
               track: p[4],
               on_ground: p[5]
             }));
-            console.log(`[FlightTrack] ✅ REST: ${trackData.length} points`);
-            console.log(`[FlightTrack] Time range: ${new Date(trackData[0].time * 1000).toLocaleString()} ~ ${new Date(trackData[trackData.length-1].time * 1000).toLocaleString()}`);
+            logger.info('FlightTrack', `REST: ${trackData.length} points`);
+            const firstTrack = trackData[0];
+            const lastTrack = trackData[trackData.length-1];
+            if (firstTrack && lastTrack) {
+              logger.debug('FlightTrack', `Time range: ${new Date(firstTrack.time * 1000).toLocaleString()} ~ ${new Date(lastTrack.time * 1000).toLocaleString()}`);
+            }
             setFlightTrack({
               icao24: data.icao24,
               callsign: data.callsign,
@@ -484,16 +489,17 @@ export default function useSelectedAircraft(selectedAircraft: AircraftData | nul
             });
           }
         } else {
-          console.warn(`[FlightTrack] OpenSky REST API error ${res.status}`);
+          logger.warn('FlightTrack', 'OpenSky REST API error', { status: res.status });
         }
       } catch (err) {
-        console.warn('Failed to fetch flight track from OpenSky:', err);
+        logger.warn('FlightTrack', 'Failed to fetch flight track from OpenSky', { error: (err as Error).message });
       } finally {
         setFlightTrackLoading(false);
       }
     };
 
     fetchTrack();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: only re-fetch when hex changes
   }, [selectedAircraft?.hex]);
 
   return {

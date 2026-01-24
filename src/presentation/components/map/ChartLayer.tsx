@@ -6,7 +6,6 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import mapboxgl from 'mapbox-gl';
 import { useMapContext } from '../../contexts/MapContext';
 import { AIRPORT_COORDINATES } from '@/config/airports';
 
@@ -76,8 +75,11 @@ export function ChartLayer({
   const { mapRef, isMapLoaded } = useMapContext();
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [activeCharts, setActiveCharts] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Loading and error states for future UI feedback
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_, setIsLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [__, setError] = useState<string | null>(null);
 
   /**
    * Calculate bounds for a chart based on airport ARP and chart type
@@ -100,7 +102,8 @@ export function ChartLayer({
       return [127.0, 35.0, 128.0, 36.0];
     }
 
-    const config = CHART_TYPE_CONFIG[chart.chart_type] || CHART_TYPE_CONFIG.OTHER;
+    const config = CHART_TYPE_CONFIG[chart.chart_type] ?? CHART_TYPE_CONFIG.OTHER;
+    if (!config) return [127.0, 35.0, 128.0, 36.0];
     const scale = config.scale;
 
     // Create bounds around the airport
@@ -119,7 +122,7 @@ export function ChartLayer({
   const loadCharts = useCallback(async () => {
     if (!airport) return;
 
-    setLoading(true);
+    setIsLoading(true);
     setError(null);
 
     try {
@@ -153,7 +156,7 @@ export function ChartLayer({
         setCharts([]);
       }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }, [airport, version, chartTypes, chartsApiUrl, onChartLoad]);
 
@@ -192,7 +195,7 @@ export function ChartLayer({
         type: 'raster',
         source: sourceId,
         paint: {
-          'raster-opacity': opacity * config.defaultOpacity,
+          'raster-opacity': opacity * (config?.defaultOpacity ?? 0.8),
           'raster-fade-duration': 0,
         },
       });
@@ -264,8 +267,8 @@ export function ChartLayer({
       const layerId = `${CHART_LAYER_PREFIX}${chartId}`;
       if (map.getLayer(layerId)) {
         const chart = charts.find((c) => c.id === chartId);
-        const config = CHART_TYPE_CONFIG[chart?.chart_type || 'OTHER'] || CHART_TYPE_CONFIG.OTHER;
-        map.setPaintProperty(layerId, 'raster-opacity', opacity * config.defaultOpacity);
+        const config = CHART_TYPE_CONFIG[chart?.chart_type || 'OTHER'] ?? CHART_TYPE_CONFIG.OTHER;
+        map.setPaintProperty(layerId, 'raster-opacity', opacity * (config?.defaultOpacity ?? 0.8));
       }
     });
   }, [opacity, activeCharts, charts, mapRef, isMapLoaded]);
@@ -287,7 +290,6 @@ export function ChartSelectorPanel({
   onChartTypeToggle?: (type: string, enabled: boolean) => void;
   selectedTypes?: string[];
 }) {
-  const [versions, setVersions] = useState<string[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<string>('');
 
   // Chart type labels
@@ -338,11 +340,6 @@ export function ChartSelectorPanel({
           }}
         >
           <option value="">Current</option>
-          {versions.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
         </select>
       </div>
 

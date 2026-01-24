@@ -27,12 +27,16 @@ module.exports = {
   rules: {
     'react-refresh/only-export-components': [
       'warn',
-      { allowConstantExport: true },
+      { allowConstantExport: true, allowExportNames: ['useAircraftContext', 'useMapContext', 'useWeatherContext', 'showToast', 'useToast'] },
     ],
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/no-explicit-any': 'warn',
     'react/prop-types': 'off',
-    'no-console': ['warn', { allow: ['warn', 'error'] }],
+    'no-console': ['warn', { allow: ['warn', 'error', 'debug', 'info'] }],
+    // Allow intentional dependency array patterns in effects
+    'react-hooks/exhaustive-deps': ['warn', {
+      additionalHooks: '(useIsomorphicLayoutEffect|useLayoutEffect)'
+    }],
   },
 };

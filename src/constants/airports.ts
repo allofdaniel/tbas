@@ -11,6 +11,34 @@ export interface AirportInfo {
   note?: string;
 }
 
+/**
+ * 공항 ICAO -> IATA 변환 매핑 (항공사 코드가 아닌 공항 코드)
+ */
+export const AIRPORT_ICAO_TO_IATA: Record<string, string> = {
+  // 대한민국
+  'RKSI': 'ICN', 'RKSS': 'GMP', 'RKPK': 'PUS', 'RKPC': 'CJU',
+  'RKPU': 'USN', 'RKTN': 'TAE', 'RKTU': 'CJJ', 'RKJB': 'MWX',
+  'RKNY': 'YNY', 'RKJY': 'RSU', 'RKPS': 'HIN', 'RKTH': 'KPO',
+  'RKJJ': 'KWJ', 'RKNW': 'WJU', 'RKJK': 'KUV',
+  // 일본
+  'RJTT': 'HND', 'RJAA': 'NRT', 'RJBB': 'KIX', 'RJCC': 'CTS',
+  'RJOO': 'ITM', 'RJFF': 'FUK', 'RJGG': 'NGO', 'RJNA': 'NGO',
+  // 중국
+  'ZBAA': 'PEK', 'ZSPD': 'PVG', 'ZSSS': 'SHA', 'ZGGG': 'CAN',
+  'VHHH': 'HKG', 'RCTP': 'TPE', 'RCSS': 'TSA',
+  // 동남아
+  'WSSS': 'SIN', 'VTBS': 'BKK', 'WMKK': 'KUL', 'VVNB': 'HAN', 'VVTS': 'SGN',
+  // 미국/유럽
+  'KJFK': 'JFK', 'KLAX': 'LAX', 'KSFO': 'SFO', 'EGLL': 'LHR', 'LFPG': 'CDG',
+};
+
+/**
+ * 공항 ICAO 코드를 IATA 코드로 변환
+ */
+export const airportIcaoToIata = (icao: string): string => {
+  return AIRPORT_ICAO_TO_IATA[icao] || icao;
+};
+
 export interface CountryInfo {
   name: string;
   flag: string;

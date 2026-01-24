@@ -117,7 +117,10 @@ export class GetAirspaceUseCase {
       if (!result[airspace.type]) {
         result[airspace.type] = [];
       }
-      result[airspace.type].push(airspace);
+      const typeArray = result[airspace.type];
+      if (typeArray) {
+        typeArray.push(airspace);
+      }
     }
 
     return result as Record<AirspaceType, Airspace[]>;

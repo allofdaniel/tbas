@@ -37,6 +37,9 @@ import { AIRPORT_COORDINATES } from '@/config/airports';
 // Hooks
 import { useGIS } from '@/presentation/hooks/useGIS';
 
+// Error Boundary
+import ErrorBoundary from '@/components/ErrorBoundary';
+
 // Config
 import {
   DEFAULT_MAP_CENTER,
@@ -468,13 +471,15 @@ function ToolbarButton({
  */
 export function App() {
   return (
-    <MapProvider initialCenter={DEFAULT_MAP_CENTER} initialZoom={10}>
-      <AircraftProvider center={DEFAULT_MAP_CENTER} radiusNM={100} autoUpdate>
-        <WeatherProvider icao="RKPU" autoUpdate>
-          <RKPUViewer />
-        </WeatherProvider>
-      </AircraftProvider>
-    </MapProvider>
+    <ErrorBoundary>
+      <MapProvider initialCenter={DEFAULT_MAP_CENTER} initialZoom={10}>
+        <AircraftProvider center={DEFAULT_MAP_CENTER} radiusNM={100} autoUpdate>
+          <WeatherProvider icao="RKPU" autoUpdate>
+            <RKPUViewer />
+          </WeatherProvider>
+        </AircraftProvider>
+      </MapProvider>
+    </ErrorBoundary>
   );
 }
 

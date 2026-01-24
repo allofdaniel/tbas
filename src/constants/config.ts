@@ -6,10 +6,18 @@
 // 환경 설정
 export const IS_PRODUCTION: boolean = import.meta.env.PROD;
 
-// Mapbox 설정
-export const MAPBOX_ACCESS_TOKEN: string =
-  (import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as string) ||
-  'pk.eyJ1IjoiYWxsb2ZkYW5pZWwiLCJhIjoiY21pbzY5ejhkMDJvZzNjczVwMmlhYTljaiJ9.eSoww-z9bQuolQ4fQHqZOg';
+// Mapbox 설정 - 환경변수 필수
+const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as string | undefined;
+
+if (!mapboxToken) {
+  console.error(
+    '[TBAS] VITE_MAPBOX_ACCESS_TOKEN 환경변수가 설정되지 않았습니다.\n' +
+    '.env 파일에 VITE_MAPBOX_ACCESS_TOKEN=your_token_here 형태로 설정하세요.\n' +
+    'Mapbox 토큰은 https://account.mapbox.com/access-tokens/ 에서 발급받을 수 있습니다.'
+  );
+}
+
+export const MAPBOX_ACCESS_TOKEN: string = mapboxToken || '';
 
 // 항공기 업데이트 간격 (밀리초) - 429 오류 방지를 위해 15초로 설정
 export const AIRCRAFT_UPDATE_INTERVAL = 15000;

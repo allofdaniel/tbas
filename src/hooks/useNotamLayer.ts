@@ -1,3 +1,6 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+// Mapbox GL dependencies are intentionally excluded from useEffect deps
+
 import { useEffect, type MutableRefObject } from 'react';
 import mapboxgl, { type Map as MapboxMap } from 'mapbox-gl';
 import {
@@ -283,15 +286,17 @@ export default function useNotamLayer(
 
     // Add popup on click for fill layer
     const handleFillClick = (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }): void => {
-      if (e.features && e.features.length > 0) {
-        showNotamPopup(e.features[0].properties || {}, e.lngLat);
+      const feature = e.features?.[0];
+      if (feature) {
+        showNotamPopup(feature.properties || {}, e.lngLat);
       }
     };
 
     const handleIconClick = (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }): void => {
       e.preventDefault();
-      if (e.features && e.features.length > 0) {
-        showNotamPopup(e.features[0].properties || {}, e.lngLat);
+      const feature = e.features?.[0];
+      if (feature) {
+        showNotamPopup(feature.properties || {}, e.lngLat);
       }
     };
 

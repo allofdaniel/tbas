@@ -3,7 +3,7 @@
  * 비행 관련 유틸리티 함수 모음
  */
 
-import { isPointInPolygon, type Coordinate, type PolygonCoordinates } from './geometry';
+import { isPointInPolygon, calculateDistance, calculateBearing, mToNm, type Coordinate, type PolygonCoordinates } from './geometry';
 
 export interface Aircraft {
   lat: number;
@@ -99,11 +99,9 @@ export const detectFlightPhase = (aircraft: Aircraft | null | undefined, airport
   const airportLat = airportData?.lat || 35.5934;
   const airportLon = airportData?.lon || 129.3518;
 
-  // 공항과의 거리 계산 (NM)
-  const distToAirport = Math.sqrt(
-    Math.pow((aircraft.lat - airportLat) * 60, 2) +
-    Math.pow((aircraft.lon - airportLon) * 60 * Math.cos(airportLat * Math.PI / 180), 2)
-  );
+  // 공항과의 거리 계산 (NM) - Haversine 공식 사용
+  const distToAirportMeters = calculateDistance(aircraft.lat, aircraft.lon, airportLat, airportLon);
+  const distToAirport = mToNm(distToAirportMeters);
 
   // 비행 단계 판정
   if (onGround || (alt < 100 && gs < 30)) {
@@ -223,17 +221,14 @@ export const findNearestWaypoints = (
   if (!aircraft || !waypoints) return [];
 
   const results = waypoints.map(wp => {
-    const dist = Math.sqrt(
-      Math.pow((wp.lat - aircraft.lat) * 60, 2) +
-      Math.pow((wp.lon - aircraft.lon) * 60 * Math.cos(aircraft.lat * Math.PI / 180), 2)
-    );
+    // Haversine 공식으로 정확한 거리 계산 (미터 -> NM)
+    const distMeters = calculateDistance(aircraft.lat, aircraft.lon, wp.lat, wp.lon);
+    const dist = mToNm(distMeters);
+
+    // 정확한 방위각 계산 (geometry.ts의 calculateBearing 사용)
+    const bearing = calculateBearing(aircraft.lat, aircraft.lon, wp.lat, wp.lon);
 
     // 진행 방향 기준으로 앞에 있는지 확인
-    const bearing = Math.atan2(
-      (wp.lon - aircraft.lon) * Math.cos(aircraft.lat * Math.PI / 180),
-      wp.lat - aircraft.lat
-    ) * 180 / Math.PI;
-
     const trackDiff = Math.abs(((bearing - (aircraft.track || 0) + 180) % 360) - 180);
     const isAhead = trackDiff < 90;
 
@@ -289,12 +284,10 @@ export const detectCurrentProcedure = (
       proc.segments.forEach(segment => {
         if (!segment.coordinates) return;
 
-        // 세그먼트의 각 점과의 거리 확인
+        // 세그먼트의 각 점과의 거리 확인 (Haversine 공식 사용)
         segment.coordinates.forEach(coord => {
-          const dist = Math.sqrt(
-            Math.pow((coord[1] - aircraft.lat) * 60, 2) +
-            Math.pow((coord[0] - aircraft.lon) * 60 * Math.cos(aircraft.lat * Math.PI / 180), 2)
-          );
+          const distMeters = calculateDistance(aircraft.lat, aircraft.lon, coord[1], coord[0]);
+          const dist = mToNm(distMeters);
 
           if (dist < minDistance && dist < 3) { // 3NM 이내
             minDistance = dist;

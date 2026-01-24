@@ -201,8 +201,9 @@ const WeatherLegend: React.FC = () => (
 
 /**
  * Weather Panel Component
+ * DO-278A 요구사항 추적: SRS-PERF-004
  */
-const WeatherPanel: React.FC<WeatherPanelProps> = ({
+const WeatherPanel: React.FC<WeatherPanelProps> = React.memo(({
   showWxPanel,
   setShowWxPanel,
   wxPanelTab,
@@ -263,6 +264,7 @@ const WeatherPanel: React.FC<WeatherPanelProps> = ({
       )}
     </div>
   );
-};
+});
+WeatherPanel.displayName = 'WeatherPanel';
 
 export default WeatherPanel;

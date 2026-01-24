@@ -27,33 +27,57 @@ export type NotamValidity = 'active' | 'future' | false;
 
 /**
  * NOTAM Q-line 좌표 파싱
+ * 유효성 검증 포함
  */
 export const parseNotamCoordinates = (fullText: string | null | undefined): NotamCoordinates | null => {
   if (!fullText) return null;
   // Q-line format: Q) FIR/QCODE/TRAFFIC/PURPOSE/SCOPE/LOWER/UPPER/COORD
   const qLineMatch = fullText.match(/Q\)\s*\S+\/\S+\/\S+\/\S+\/\S+\/(\d{3})\/(\d{3})\/(\d{4})([NS])(\d{5})([EW])(\d{3})/);
-  if (!qLineMatch) return null;
+  if (!qLineMatch || qLineMatch.length < 8) return null;
 
   const [, lowerAlt, upperAlt, latDeg, latDir, lonDeg, lonDir, radiusNM] = qLineMatch;
+
+  // 입력 유효성 검증
+  if (!latDeg || latDeg.length !== 4) return null;
+  if (!lonDeg || lonDeg.length !== 5) return null;
 
   // Parse latitude: DDMM format
   const latDegrees = parseInt(latDeg.substring(0, 2), 10);
   const latMinutes = parseInt(latDeg.substring(2, 4), 10);
+
+  // 위도 유효성 검증
+  if (isNaN(latDegrees) || isNaN(latMinutes)) return null;
+  if (latDegrees < 0 || latDegrees > 90) return null;
+  if (latMinutes < 0 || latMinutes >= 60) return null;
+
   let lat = latDegrees + latMinutes / 60;
   if (latDir === 'S') lat = -lat;
 
   // Parse longitude: DDDMM format
   const lonDegrees = parseInt(lonDeg.substring(0, 3), 10);
   const lonMinutes = parseInt(lonDeg.substring(3, 5), 10);
+
+  // 경도 유효성 검증
+  if (isNaN(lonDegrees) || isNaN(lonMinutes)) return null;
+  if (lonDegrees < 0 || lonDegrees > 180) return null;
+  if (lonMinutes < 0 || lonMinutes >= 60) return null;
+
   let lon = lonDegrees + lonMinutes / 60;
   if (lonDir === 'W') lon = -lon;
+
+  const radius = parseInt(radiusNM ?? '0', 10);
+  const lower = parseInt(lowerAlt ?? '0', 10);
+  const upper = parseInt(upperAlt ?? '0', 10);
+
+  // 최종 유효성 검증
+  if (isNaN(radius) || isNaN(lower) || isNaN(upper)) return null;
 
   return {
     lat,
     lon,
-    radiusNM: parseInt(radiusNM, 10),
-    lowerAlt: parseInt(lowerAlt, 10) * 100, // FL to feet
-    upperAlt: parseInt(upperAlt, 10) * 100,
+    radiusNM: radius,
+    lowerAlt: lower * 100, // FL to feet
+    upperAlt: upper * 100,
   };
 };
 
@@ -96,12 +120,18 @@ export const getNotamDisplayCoords = (notam: Notam): NotamCoordinates | null => 
 
 /**
  * NOTAM 타입 파싱 (N=New, R=Replace, C=Cancel)
+ * 헤더 부분에서만 검색하여 본문 오탐 방지
  */
 export const getNotamType = (fullText: string | null | undefined): 'N' | 'R' | 'C' => {
   if (!fullText) return 'N';
-  // Look for NOTAMN, NOTAMR, NOTAMC in the text
-  if (fullText.includes('NOTAMC')) return 'C'; // Cancel - cancels another NOTAM
-  if (fullText.includes('NOTAMR')) return 'R'; // Replace - replaces another NOTAM
+  // NOTAM 헤더는 보통 처음 200자 이내에 있음
+  const header = fullText.substring(0, 200);
+  // 정확한 패턴 매칭: NOTAMN, NOTAMR, NOTAMC 뒤에 공백이나 줄바꿈이 옴
+  if (/NOTAMC[\s\n]/.test(header)) return 'C'; // Cancel
+  if (/NOTAMR[\s\n]/.test(header)) return 'R'; // Replace
+  // includes도 헤더에서만 확인 (fallback)
+  if (header.includes('NOTAMC')) return 'C';
+  if (header.includes('NOTAMR')) return 'R';
   return 'N'; // New - default
 };
 
@@ -112,7 +142,7 @@ export const getCancelledNotamRef = (fullText: string | null | undefined): strin
   if (!fullText) return null;
   // Pattern: NOTAMC or NOTAMR followed by the reference (e.g., "NOTAMC A1045/24")
   const match = fullText.match(/NOTAM[CR]\s+([A-Z]\d{4}\/\d{2})/);
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 };
 
 interface ExtractedDates {
@@ -203,6 +233,103 @@ export const getNotamValidity = (notam: Notam, cancelledSet: Set<string> = new S
 export const isNotamActive = (notam: Notam, cancelledSet: Set<string> = new Set()): boolean => {
   const validity = getNotamValidity(notam, cancelledSet);
   return validity === 'active' || validity === 'future';
+};
+
+/**
+ * NOTAM 기간별 필터링
+ * @param notam NOTAM 객체
+ * @param period 기간 ('current', '1month', '1year', 'all')
+ * @param cancelledSet 취소된 NOTAM Set
+ * @returns 표시 여부
+ */
+export const isNotamInPeriod = (
+  notam: Notam,
+  period: string,
+  cancelledSet: Set<string> = new Set()
+): boolean => {
+  // Skip NOTAMC (cancel) type
+  const notamType = getNotamType(notam.full_text);
+  if (notamType === 'C') return false;
+
+  // Check if this NOTAM has been cancelled
+  if (notam.notam_number && cancelledSet.has(notam.notam_number)) return false;
+
+  const now = new Date();
+  let startDate: Date | null = null;
+  let endDate: Date | null = null;
+
+  // Parse dates from effective_start/effective_end
+  if (notam.effective_start && notam.effective_start.length >= 10) {
+    startDate = parseNotamDateString(notam.effective_start);
+  }
+
+  if (notam.effective_end && notam.effective_end.length >= 10 &&
+      !notam.effective_end.includes('PERM') && !notam.effective_end.includes('EST')) {
+    endDate = parseNotamDateString(notam.effective_end);
+  } else if (notam.effective_end?.includes('PERM')) {
+    endDate = new Date(2099, 11, 31);
+  }
+
+  // Fallback: extract from full_text
+  if (!startDate || !endDate) {
+    const extracted = extractDatesFromFullText(notam.full_text);
+    if (!startDate && extracted.start) startDate = extracted.start;
+    if (!endDate && extracted.end) endDate = extracted.end;
+  }
+
+  // 영구(Permanent) NOTAM 감지: endDate가 2099년이면 영구 NOTAM
+  // Note: isPermanent used implicitly in logic below (permanent NOTAMs always shown in 'current')
+
+  // 날짜 정보가 없는 경우 처리
+  if (!startDate && !endDate) {
+    // 날짜 정보 없음: 'all'에서만 표시
+    return period === 'all';
+  }
+
+  // startDate만 없는 경우 (endDate는 있음)
+  if (!startDate && endDate) {
+    // 만료된 경우 제외
+    if (now > endDate) return period === 'all';
+    // 영구 또는 유효한 NOTAM: 표시
+    return true;
+  }
+
+  // Period-based filtering
+  switch (period) {
+    case 'current': {
+      // Only currently active or future NOTAMs (not expired)
+      if (endDate && now > endDate) return false;
+      return true;
+    }
+    case '1month': {
+      // NOTAMs relevant within 1 month (past or future)
+      const oneMonthAgo = new Date(now);
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      const oneMonthLater = new Date(now);
+      oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+
+      // If ended before 1 month ago, exclude
+      if (endDate && endDate < oneMonthAgo) return false;
+      // If starts after 1 month later, exclude
+      if (startDate && startDate > oneMonthLater) return false;
+      return true;
+    }
+    case '1year': {
+      // NOTAMs relevant within 1 year
+      const oneYearAgo = new Date(now);
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      const oneYearLater = new Date(now);
+      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+
+      if (endDate && endDate < oneYearAgo) return false;
+      if (startDate && startDate > oneYearLater) return false;
+      return true;
+    }
+    case 'all':
+    default:
+      // Show all NOTAMs (including expired)
+      return true;
+  }
 };
 
 /**

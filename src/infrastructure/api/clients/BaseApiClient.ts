@@ -3,10 +3,11 @@
  * DO-278A 요구사항 추적: SRS-API-001
  *
  * HTTP API 호출을 위한 기본 클래스
- * 재시도 로직, 에러 처리, 캐싱 등을 포함
+ * 재시도 로직, 에러 처리, 캐싱, 요청 중복방지 등을 포함
  */
 
 import { API_BASE_URL } from '@/config/constants';
+import { logger } from '@/utils/logger';
 
 /**
  * API 에러 클래스
@@ -55,6 +56,8 @@ export class BaseApiClient {
   protected defaultTimeout: number;
   protected defaultRetries: number;
   protected defaultRetryDelay: number;
+  /** 진행 중인 요청 (중복 방지용) */
+  private pendingRequests = new Map<string, Promise<unknown>>();
 
   constructor(
     baseUrl = API_BASE_URL,
@@ -68,6 +71,35 @@ export class BaseApiClient {
     this.defaultTimeout = options?.timeout ?? 30000;
     this.defaultRetries = options?.retries ?? 3;
     this.defaultRetryDelay = options?.retryDelay ?? 1000;
+  }
+
+  /**
+   * 진행 중인 동일 요청이 있으면 해당 Promise 반환 (요청 중복 방지)
+   */
+  protected async requestWithDedup<T>(
+    endpoint: string,
+    options: RequestOptions = {}
+  ): Promise<T> {
+    const method = options.method || 'GET';
+    const requestKey = `${method}:${endpoint}`;
+
+    // 진행 중인 동일 요청이 있으면 그 Promise를 반환
+    const pending = this.pendingRequests.get(requestKey);
+    if (pending) {
+      logger.debug('API', `Deduplicating request: ${requestKey}`);
+      return pending as Promise<T>;
+    }
+
+    // 새 요청 생성
+    const promise = this.request<T>(endpoint, options);
+    this.pendingRequests.set(requestKey, promise);
+
+    try {
+      const result = await promise;
+      return result;
+    } finally {
+      this.pendingRequests.delete(requestKey);
+    }
   }
 
   /**
@@ -87,6 +119,7 @@ export class BaseApiClient {
     } = options;
 
     const url = endpoint.startsWith('http') ? endpoint : `${this.baseUrl}${endpoint}`;
+    const startTime = performance.now();
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -106,9 +139,11 @@ export class BaseApiClient {
         });
 
         clearTimeout(timeoutId);
+        const duration = performance.now() - startTime;
 
         if (response.status === 429) {
           const retryAfter = response.headers.get('Retry-After');
+          logger.warn('API', `Rate limited: ${endpoint}`, { retryAfter });
           throw new RateLimitError(
             'Rate limited',
             retryAfter ? parseInt(retryAfter, 10) : undefined
@@ -117,6 +152,7 @@ export class BaseApiClient {
 
         if (!response.ok) {
           const errorBody = await response.text();
+          logger.api(endpoint, method, response.status, duration);
           throw new ApiError(
             `HTTP ${response.status}: ${response.statusText}`,
             response.status,
@@ -125,6 +161,7 @@ export class BaseApiClient {
         }
 
         const data = await response.json();
+        logger.api(endpoint, method, response.status, duration);
         return data as T;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
@@ -134,6 +171,7 @@ export class BaseApiClient {
           const delay = error.retryAfter
             ? error.retryAfter * 1000
             : retryDelay * Math.pow(2, attempt);
+          logger.debug('API', `Retrying after rate limit: ${endpoint}`, { attempt, delay });
           await this.sleep(delay);
           continue;
         }
@@ -144,12 +182,16 @@ export class BaseApiClient {
           error.message.includes('fetch') &&
           attempt < retries
         ) {
-          await this.sleep(retryDelay * Math.pow(2, attempt));
+          const delay = retryDelay * Math.pow(2, attempt);
+          logger.debug('API', `Retrying after network error: ${endpoint}`, { attempt, delay });
+          await this.sleep(delay);
           continue;
         }
 
         // AbortError (타임아웃)는 재시도하지 않음
         if (error instanceof DOMException && error.name === 'AbortError') {
+          const duration = performance.now() - startTime;
+          logger.api(endpoint, method, 408, duration);
           throw new ApiError('Request timeout', 408);
         }
 
@@ -158,6 +200,8 @@ export class BaseApiClient {
       }
     }
 
+    const duration = performance.now() - startTime;
+    logger.error('API', `Request failed: ${endpoint}`, lastError, { duration, attempts: retries + 1 });
     throw lastError ?? new Error('Unknown error');
   }
 

@@ -67,12 +67,30 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
+    // DO-278A 성능 최적화
+    // Mapbox GL JS는 약 465KB (gzip)로 본질적으로 큰 라이브러리
+    // GIS 애플리케이션에서 필수적이므로 청크 크기 경고 상향 조정
+    chunkSizeWarningLimit: 1800, // mapbox (1.68MB) 포함 허용
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-mapbox': ['mapbox-gl'],
-          'vendor-three': ['three'],
+        // 청크 분리 최적화
+        manualChunks: (id) => {
+          // React 코어 분리
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
+            return 'vendor-react';
+          }
+          // Mapbox GL 분리 (가장 큰 청크, ~465KB gzip)
+          if (id.includes('node_modules/mapbox-gl')) {
+            return 'vendor-mapbox';
+          }
+          // Three.js 3D 렌더링 분리
+          if (id.includes('node_modules/three')) {
+            return 'vendor-three';
+          }
+          // 나머지 node_modules는 vendor 청크로
+          if (id.includes('node_modules')) {
+            return 'vendor-common';
+          }
         },
       },
     },

@@ -36,20 +36,34 @@ export function AircraftInfoPanel({
       return;
     }
 
+    // Race condition 방지: registration 변경 또는 컴포넌트 unmount 시 취소
+    let cancelled = false;
+
     const loadPhoto = async () => {
       setIsLoadingPhoto(true);
       try {
         const repo = getAircraftRepository();
         const url = await repo.fetchPhotoUrl(aircraft.registration!);
-        setPhotoUrl(url);
+        // 취소되지 않았을 때만 상태 업데이트
+        if (!cancelled) {
+          setPhotoUrl(url);
+        }
       } catch {
-        setPhotoUrl(null);
+        if (!cancelled) {
+          setPhotoUrl(null);
+        }
       } finally {
-        setIsLoadingPhoto(false);
+        if (!cancelled) {
+          setIsLoadingPhoto(false);
+        }
       }
     };
 
     loadPhoto();
+
+    return () => {
+      cancelled = true;
+    };
   }, [aircraft.registration]);
 
   /**

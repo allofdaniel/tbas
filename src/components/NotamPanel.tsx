@@ -13,7 +13,7 @@ import {
   getNotamType,
   getCancelledNotamRef,
   getNotamValidity,
-  isNotamActive,
+  isNotamInPeriod,
   buildCancelledNotamSet,
 } from '../utils/notam';
 
@@ -78,6 +78,7 @@ interface LocationFilterProps {
 
 interface MapToggleSectionProps {
   notamData: NotamDataResponse | null;
+  notamPeriod: string;
   notamLocationsOnMap: Set<string>;
   setNotamLocationsOnMap: (locations: Set<string>) => void;
 }
@@ -85,6 +86,7 @@ interface MapToggleSectionProps {
 interface NotamListProps {
   notamData: NotamDataResponse;
   notamFilter: string;
+  notamPeriod: string;
   notamLocationsOnMap: Set<string>;
   notamExpanded: NotamExpandedState;
   setNotamExpanded: React.Dispatch<React.SetStateAction<NotamExpandedState>>;
@@ -134,12 +136,15 @@ const NotamPanel: React.FC<NotamPanelProps> = ({
         className={`view-btn ${showNotamPanel ? 'active' : ''}`}
         onClick={() => setShowNotamPanel(!showNotamPanel)}
         title="NOTAM"
+        aria-label="NOTAM 패널 열기/닫기"
+        aria-expanded={showNotamPanel}
+        aria-haspopup="dialog"
       >
         NOTAM
       </button>
 
       {showNotamPanel && (
-        <div className="notam-dropdown">
+        <div className="notam-dropdown" role="dialog" aria-label="NOTAM 패널">
           {/* Header */}
           <div className="notam-dropdown-header">
             <span className="notam-dropdown-title">NOTAM</span>
@@ -149,6 +154,7 @@ const NotamPanel: React.FC<NotamPanelProps> = ({
                 value={notamPeriod}
                 onChange={(e) => setNotamPeriod(e.target.value)}
                 title="기간"
+                aria-label="NOTAM 표시 기간 선택"
               >
                 <option value="current">현재 유효</option>
                 <option value="1month">1개월</option>
@@ -166,6 +172,7 @@ const NotamPanel: React.FC<NotamPanelProps> = ({
                 className="notam-refresh-btn"
                 onClick={() => fetchNotamData(notamPeriod, true)}
                 title="새로고침 (캐시 무시)"
+                aria-label="NOTAM 데이터 새로고침"
               >
                 ↻
               </button>
@@ -186,12 +193,14 @@ const NotamPanel: React.FC<NotamPanelProps> = ({
               value={notamFilter}
               onChange={(e) => setNotamFilter(e.target.value)}
               className="notam-search-input"
+              aria-label="NOTAM 검색"
             />
           </div>
 
           {/* Map Toggle Section */}
           <MapToggleSection
             notamData={notamData}
+            notamPeriod={notamPeriod}
             notamLocationsOnMap={notamLocationsOnMap}
             setNotamLocationsOnMap={setNotamLocationsOnMap}
           />
@@ -219,6 +228,7 @@ const NotamPanel: React.FC<NotamPanelProps> = ({
               <NotamList
                 notamData={notamData}
                 notamFilter={notamFilter}
+                notamPeriod={notamPeriod}
                 notamLocationsOnMap={notamLocationsOnMap}
                 notamExpanded={notamExpanded}
                 setNotamExpanded={setNotamExpanded}
@@ -266,6 +276,7 @@ const LocationFilter: React.FC<LocationFilterProps> = ({ notamData, notamLocatio
       className="notam-location-select"
       value={notamLocationFilter}
       onChange={(e) => setNotamLocationFilter(e.target.value)}
+      aria-label="NOTAM 지역 필터"
     >
       <option value="">전체 지역</option>
       {intlAirports.length > 0 && (
@@ -303,7 +314,7 @@ const LocationFilter: React.FC<LocationFilterProps> = ({ notamData, notamLocatio
 /**
  * Map Toggle Section Component
  */
-const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamLocationsOnMap, setNotamLocationsOnMap }) => {
+const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamPeriod, notamLocationsOnMap, setNotamLocationsOnMap }) => {
   const locations = [...new Set(notamData?.data?.map(n => n.location).filter(Boolean) as string[])];
   const locationsWithCoords = locations.filter(loc => AIRPORT_COORDINATES[loc]);
 
@@ -340,15 +351,13 @@ const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamLoc
     setNotamLocationsOnMap(newSet);
   };
 
-  // Calculate NOTAM counts
+  // Calculate NOTAM counts based on period
   const getNotamCounts = (): Record<string, number> => {
     const counts: Record<string, number> = {};
     const cancelledSet = buildCancelledNotamSet(notamData?.data || []);
     notamData?.data?.forEach(n => {
-      const nType = getNotamType(n.full_text || '');
-      if (nType === 'C') return;
-      const validity = getNotamValidity(n, cancelledSet);
-      if (!validity) return;
+      // Use period-based filtering for counts
+      if (!isNotamInPeriod(n, notamPeriod, cancelledSet)) return;
       counts[n.location || ''] = (counts[n.location || ''] || 0) + 1;
     });
     return counts;
@@ -371,12 +380,14 @@ const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamLoc
               className={`notam-map-chip ${isActive ? 'active' : ''} ${info?.type || 'other'}`}
               onClick={() => toggleLocation(loc)}
               title={`${loc} ${info?.name || ''} (${count}건) - 지도에 ${isActive ? '숨기기' : '표시'}`}
+              aria-pressed={isActive}
+              aria-label={`${loc} ${info?.name || ''} (${count}건)`}
             >
               {loc} {shortName !== loc ? shortName : ''} ({count})
             </button>
           );
         })}
-        <button className="notam-select-all-btn" onClick={() => toggleAll(locs)}>
+        <button className="notam-select-all-btn" onClick={() => toggleAll(locs)} aria-label={`${label} ${locs.every(loc => notamLocationsOnMap.has(loc)) ? '전체 해제' : '전체 선택'}`}>
           {locs.every(loc => notamLocationsOnMap.has(loc)) ? '전체해제' : '전체선택'}
         </button>
       </div>
@@ -391,7 +402,9 @@ const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamLoc
         const countryInfo = COUNTRY_INFO[country];
         const countryName = countryInfo?.name || '기타';
         const countryFlag = countryInfo?.flag || '🌐';
-        const airportsInCountry = byCountry[country].sort();
+        const countryAirports = byCountry[country];
+        if (!countryAirports) return null;
+        const airportsInCountry = countryAirports.sort();
 
         if (country === 'KR') {
           const hub = airportsInCountry.filter(loc => AIRPORT_DATABASE[loc]?.type === 'hub');
@@ -427,12 +440,14 @@ const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamLoc
                     className={`notam-map-chip ${isActive ? 'active' : ''} ${info?.type || 'other'}`}
                     onClick={() => toggleLocation(loc)}
                     title={`${loc} ${info?.name || ''} (${count}건) - 지도에 ${isActive ? '숨기기' : '표시'}`}
+                    aria-pressed={isActive}
+                    aria-label={`${loc} ${info?.name || ''} (${count}건)`}
                   >
                     {loc} {shortName !== loc ? shortName : ''} ({count})
                   </button>
                 );
               })}
-              <button className="notam-select-all-btn" onClick={() => toggleAll(airportsInCountry)}>
+              <button className="notam-select-all-btn" onClick={() => toggleAll(airportsInCountry)} aria-label={`${countryName} ${airportsInCountry.every(loc => notamLocationsOnMap.has(loc)) ? '전체 해제' : '전체 선택'}`}>
                 {airportsInCountry.every(loc => notamLocationsOnMap.has(loc)) ? '전체해제' : '전체선택'}
               </button>
             </div>
@@ -444,6 +459,7 @@ const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamLoc
         <button
           className="notam-map-clear-btn"
           onClick={() => setNotamLocationsOnMap(new Set())}
+          aria-label={`지도 필터 해제 (${notamLocationsOnMap.size}개 선택됨)`}
         >
           필터 해제 ({notamLocationsOnMap.size}개 선택됨)
         </button>
@@ -455,7 +471,7 @@ const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamLoc
 /**
  * NOTAM List Component
  */
-const NotamList: React.FC<NotamListProps> = ({ notamData, notamFilter, notamLocationsOnMap, notamExpanded, setNotamExpanded }) => {
+const NotamList: React.FC<NotamListProps> = ({ notamData, notamFilter, notamPeriod, notamLocationsOnMap, notamExpanded, setNotamExpanded }) => {
   const cancelledSet = buildCancelledNotamSet(notamData.data || []);
 
   const filtered = notamData.data?.filter(n => {
@@ -465,12 +481,13 @@ const NotamList: React.FC<NotamListProps> = ({ notamData, notamFilter, notamLoca
       n.location?.toLowerCase().includes(notamFilter.toLowerCase()) ||
       n.e_text?.toLowerCase().includes(notamFilter.toLowerCase()) ||
       n.qcode_mean?.toLowerCase().includes(notamFilter.toLowerCase());
-    const isValid = isNotamActive(n, cancelledSet);
-    return matchMapFilter && matchSearch && isValid;
+    // Use period-based filtering instead of just isNotamActive
+    const isInPeriod = isNotamInPeriod(n, notamPeriod, cancelledSet);
+    return matchMapFilter && matchSearch && isInPeriod;
   }) || [];
 
   if (filtered.length === 0) {
-    return <div className="notam-empty">해당 조건의 유효한 NOTAM이 없습니다.</div>;
+    return <div className="notam-empty">해당 조건의 NOTAM이 없습니다.</div>;
   }
 
   return (
@@ -506,6 +523,16 @@ const NotamItem: React.FC<NotamItemProps> = ({ notam, idx, cancelledSet, notamEx
       <div
         className="notam-item-header"
         onClick={() => setNotamExpanded(p => ({ ...p, [itemKey]: !p[itemKey] }))}
+        role="button"
+        tabIndex={0}
+        aria-expanded={notamExpanded[itemKey] || false}
+        aria-label={`${n.location} ${n.notam_number} - ${validityLabel} ${typeLabel}`}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setNotamExpanded(p => ({ ...p, [itemKey]: !p[itemKey] }));
+          }
+        }}
       >
         <span className="notam-location">{n.location}</span>
         <span className="notam-number">{n.notam_number}</span>

@@ -5,8 +5,11 @@
  * 항공기 항적 표시 레이어
  */
 
+/* eslint-disable react-hooks/exhaustive-deps */
+// Mapbox GL dependencies are intentionally excluded from useEffect deps
+
 import { useEffect, useCallback } from 'react';
-import mapboxgl from 'mapbox-gl';
+import type { GeoJSONSource } from 'mapbox-gl';
 import { useMapContext } from '../../contexts/MapContext';
 import { useAircraftContext } from '../../contexts/AircraftContext';
 import type { AircraftTrailPoint } from '@/types';
@@ -117,7 +120,7 @@ export function TrailLayer({
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    const source = map.getSource(TRAIL_SOURCE_ID) as mapboxgl.GeoJSONSource;
+    const source = map.getSource(TRAIL_SOURCE_ID) as GeoJSONSource;
     if (source) {
       source.setData(createTrailGeoJSON(trails));
     }

@@ -6,6 +6,7 @@
  */
 
 import type { IStorage, CacheOptions, StoredItem } from './IStorage';
+import { logger } from '../../utils/logger';
 
 /**
  * DB 설정
@@ -255,7 +256,7 @@ export class IndexedDBAdapter implements IStorage {
           count++;
           cursor.continue();
         } else {
-          console.log(`IndexedDB cleanup: removed ${count} expired items`);
+          logger.debug('IndexedDB', `Cleanup: removed ${count} expired items`);
           resolve();
         }
       };

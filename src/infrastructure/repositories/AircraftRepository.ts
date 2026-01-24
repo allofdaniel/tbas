@@ -61,7 +61,7 @@ export class AircraftRepository implements IAircraftRepository {
   /**
    * 항공기 사진 URL 조회
    */
-  async fetchPhotoUrl(hex: string, registration?: string): Promise<string | null> {
+  async fetchPhotoUrl(_hex: string, registration?: string): Promise<string | null> {
     if (!registration) return null;
     return this.apiClient.fetchPhotoUrl(registration);
   }

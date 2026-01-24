@@ -11,11 +11,17 @@ export const formatUTC = (date: Date): string => {
 };
 
 /**
- * KST 시간 포맷
+ * KST 시간 포맷 (한국 표준시)
+ * toLocaleString 사용으로 정확한 timezone 변환
  */
 export const formatKST = (date: Date): string => {
-  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-  return kst.toISOString().slice(11, 19) + ' KST';
+  return date.toLocaleTimeString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }) + ' KST';
 };
 
 /**
@@ -119,7 +125,7 @@ export const icaoToIata = (icao: string): string => {
 export const extractAirlineCode = (callsign: string | null | undefined): string | null => {
   if (!callsign) return null;
   const match = callsign.match(/^([A-Z]{3})/);
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 };
 
 /**
@@ -140,18 +146,36 @@ export const parseMetarTime = (metar: string | null | undefined): string | null 
 
 /**
  * NOTAM 날짜 파싱 (YYMMDDHHMM 형식)
+ * 날짜 유효성 검증 포함
  */
 export const parseNotamDateString = (dateStr: string | null | undefined): Date | null => {
-  if (!dateStr || dateStr.length !== 10) return null;
+  if (!dateStr || dateStr.length < 10) return null;
 
   try {
-    const year = 2000 + parseInt(dateStr.substring(0, 2), 10);
-    const month = parseInt(dateStr.substring(2, 4), 10) - 1;
+    const yy = parseInt(dateStr.substring(0, 2), 10);
+    const month = parseInt(dateStr.substring(2, 4), 10);
     const day = parseInt(dateStr.substring(4, 6), 10);
     const hour = parseInt(dateStr.substring(6, 8), 10);
     const min = parseInt(dateStr.substring(8, 10), 10);
 
-    return new Date(Date.UTC(year, month, day, hour, min));
+    // 유효성 검증
+    if (isNaN(yy) || isNaN(month) || isNaN(day) || isNaN(hour) || isNaN(min)) {
+      return null;
+    }
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31) return null;
+    if (hour < 0 || hour > 23) return null;
+    if (min < 0 || min > 59) return null;
+
+    // 연도 처리: 50 이상이면 1900년대, 아니면 2000년대
+    const year = yy >= 50 ? 1900 + yy : 2000 + yy;
+
+    const date = new Date(Date.UTC(year, month - 1, day, hour, min));
+
+    // Date 객체가 유효한지 확인 (예: 2월 30일 같은 잘못된 날짜 필터링)
+    if (isNaN(date.getTime())) return null;
+
+    return date;
   } catch {
     return null;
   }

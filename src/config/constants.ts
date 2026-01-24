@@ -19,9 +19,18 @@ export const IS_DEVELOPMENT = import.meta.env.DEV;
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'https://tbas.vercel.app';
 
-export const MAPBOX_ACCESS_TOKEN =
-  import.meta.env.VITE_MAPBOX_ACCESS_TOKEN ||
-  'pk.eyJ1IjoiYWxsb2ZkYW5pZWwiLCJhIjoiY21pbzY5ejhkMDJvZzNjczVwMmlhYTljaiJ9.eSoww-z9bQuolQ4fQHqZOg';
+// Mapbox 설정 - 환경변수 필수
+const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+
+if (!mapboxToken) {
+  console.error(
+    '[TBAS] VITE_MAPBOX_ACCESS_TOKEN 환경변수가 설정되지 않았습니다.\n' +
+    '.env 파일에 VITE_MAPBOX_ACCESS_TOKEN=your_token_here 형태로 설정하세요.\n' +
+    'Mapbox 토큰은 https://account.mapbox.com/access-tokens/ 에서 발급받을 수 있습니다.'
+  );
+}
+
+export const MAPBOX_ACCESS_TOKEN = mapboxToken || '';
 
 // ============================================
 // 갱신 주기

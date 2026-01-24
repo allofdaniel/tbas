@@ -8,6 +8,7 @@ export { default as AltitudeLegend } from './AltitudeLegend';
 export { default as Accordion } from './Accordion';
 export { default as ToggleItem } from './ToggleItem';
 export { ToastProvider, useToast, default as Toast } from './Toast';
+export { default as ErrorBoundary } from './ErrorBoundary';
 
 // Panels
 export { default as NotamPanel } from './NotamPanel';

@@ -1,15 +1,50 @@
 import { useState, useEffect } from 'react';
 import { generateColor } from '../utils/colors';
+import { logger } from '../utils/logger';
+
+// ============================================
+// 항공 데이터 타입 정의
+// ============================================
+
+export interface Waypoint {
+  name: string;
+  lat: number;
+  lon: number;
+  type?: string;
+}
+
+export interface Obstacle {
+  name?: string;
+  lat: number;
+  lon: number;
+  elevation_ft: number;
+  type?: string;
+}
+
+export interface ProcedurePoint {
+  name: string;
+  lat: number;
+  lon: number;
+  alt_restriction?: string;
+  speed_restriction?: string;
+}
+
+export interface Procedure {
+  name: string;
+  runway?: string;
+  type: 'SID' | 'STAR' | 'APPROACH';
+  points: ProcedurePoint[];
+}
 
 export interface AviationData {
   procedures?: {
-    SID?: Record<string, unknown>;
-    STAR?: Record<string, unknown>;
-    APPROACH?: Record<string, unknown>;
+    SID?: Record<string, Procedure>;
+    STAR?: Record<string, Procedure>;
+    APPROACH?: Record<string, Procedure>;
   };
-  waypoints?: unknown[];
-  obstacles?: unknown[];
-  airspace?: unknown;
+  waypoints?: Waypoint[];
+  obstacles?: Obstacle[];
+  airspace?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -19,16 +54,62 @@ export interface ProcColors {
   APPROACH: Record<string, string>;
 }
 
+// ============================================
+// 한국 공역 데이터 타입 정의
+// ============================================
+
+export interface KoreaWaypoint {
+  name: string;
+  lat: number;
+  lon: number;
+  type: string;
+}
+
+export interface KoreaNavaid {
+  ident: string;
+  name: string;
+  type: string;
+  lat: number;
+  lon: number;
+  freq_mhz: string | null;
+}
+
+export interface RoutePoint {
+  name: string;
+  full_name?: string;
+  lat: number;
+  lon: number;
+  mea_ft?: number;
+}
+
+export interface KoreaRoute {
+  name: string;
+  type: string;
+  points: RoutePoint[];
+}
+
+export interface KoreaAirspace {
+  name: string;
+  type: string;
+  category: string;
+  boundary: [number, number][]; // [lon, lat][]
+  lower_limit_ft?: number;
+  upper_limit_ft?: number;
+}
+
+export interface KoreaAirspaceMetadata {
+  source?: string;
+  airac?: string;
+  extracted?: string;
+  url?: string;
+}
+
 export interface KoreaAirspaceData {
-  waypoints?: unknown[];
-  routes?: unknown[];
-  navaids?: unknown[];
-  airspaces?: unknown[];
-  metadata?: {
-    airac?: string;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
+  waypoints?: KoreaWaypoint[];
+  routes?: KoreaRoute[];
+  navaids?: KoreaNavaid[];
+  airspaces?: KoreaAirspace[];
+  metadata?: KoreaAirspaceMetadata;
 }
 
 export interface UseDataLoadingReturn {
@@ -110,7 +191,7 @@ export default function useDataLoading(): UseDataLoadingReturn {
       // RKPU 수동 차트로 덮어쓰기
       if (Object.keys(rkpuCharts).length > 0) {
         allBounds['RKPU'] = rkpuCharts;
-        console.log(`Merged ${Object.keys(rkpuCharts).length} manual RKPU charts`);
+        logger.debug('DataLoading', `Merged ${Object.keys(rkpuCharts).length} manual RKPU charts`);
       }
 
       setAllChartBounds(allBounds);
@@ -123,8 +204,8 @@ export default function useDataLoading(): UseDataLoadingReturn {
         });
       });
       setChartOpacities(opacities);
-      console.log(`Loaded chart bounds for ${Object.keys(allBounds).length} airports`);
-    }).catch((err) => console.warn('Failed to load chart bounds:', err));
+      logger.debug('DataLoading', `Loaded chart bounds for ${Object.keys(allBounds).length} airports`);
+    }).catch((err) => logger.warn('DataLoading', 'Failed to load chart bounds', { error: (err as Error).message }));
   }, []);
 
   // Load ATC sectors
@@ -132,7 +213,7 @@ export default function useDataLoading(): UseDataLoadingReturn {
     fetch('/atc_sectors.json')
       .then((res) => res.json())
       .then((data) => setAtcData(data))
-      .catch((err) => console.warn('Failed to load ATC sectors:', err));
+      .catch((err) => logger.warn('DataLoading', 'Failed to load ATC sectors', { error: (err as Error).message }));
   }, []);
 
   // Load Korea airspace data
@@ -141,9 +222,9 @@ export default function useDataLoading(): UseDataLoadingReturn {
       .then((res) => res.json())
       .then((data: KoreaAirspaceData) => {
         setKoreaAirspaceData(data);
-        console.log(`Loaded Korea airspace: ${data.waypoints?.length} waypoints, ${data.routes?.length} routes, ${data.navaids?.length} navaids, ${data.airspaces?.length} airspaces (AIRAC ${data.metadata?.airac})`);
+        logger.info('DataLoading', `Loaded Korea airspace: ${data.waypoints?.length} waypoints, ${data.routes?.length} routes, ${data.navaids?.length} navaids, ${data.airspaces?.length} airspaces (AIRAC ${data.metadata?.airac})`);
       })
-      .catch((err) => console.warn('Failed to load Korea airspace data:', err));
+      .catch((err) => logger.warn('DataLoading', 'Failed to load Korea airspace data', { error: (err as Error).message }));
   }, []);
 
   return {

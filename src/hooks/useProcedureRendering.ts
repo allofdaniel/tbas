@@ -117,7 +117,7 @@ const useProcedureRendering = (
     const procedureLines: ProcedureLine[] = [];
     Object.entries(procedures).forEach(([key, proc]) => {
       if (!visibleState[key]) return;
-      const color = colors[key];
+      const color = colors[key] ?? '#ffffff';
 
       // Each segment is a separate line (don't merge)
       proc.segments?.forEach(seg => {
@@ -149,22 +149,32 @@ const useProcedureRendering = (
           const indices: number[] = [];
 
           for (let i = 0; i < coords.length; i++) {
-            const [lon, lat, alt] = coords[i];
+            const coord = coords[i];
+            if (!coord) continue;
+            const [lon, lat, alt] = coord;
             const altM = alt || 0;
             const p = mapboxgl.MercatorCoordinate.fromLngLat([lon, lat], altM);
 
             // Calculate direction for ribbon width
             let dx: number, dy: number;
             if (i < coords.length - 1) {
-              const [nextLon, nextLat, nextAlt] = coords[i + 1];
-              const nextP = mapboxgl.MercatorCoordinate.fromLngLat([nextLon, nextLat], nextAlt || 0);
-              dx = nextP.x - p.x;
-              dy = nextP.y - p.y;
+              const nextCoord = coords[i + 1];
+              if (!nextCoord) { dx = 1; dy = 0; }
+              else {
+                const [nextLon, nextLat, nextAlt] = nextCoord;
+                const nextP = mapboxgl.MercatorCoordinate.fromLngLat([nextLon, nextLat], nextAlt || 0);
+                dx = nextP.x - p.x;
+                dy = nextP.y - p.y;
+              }
             } else if (i > 0) {
-              const [prevLon, prevLat, prevAlt] = coords[i - 1];
-              const prevP = mapboxgl.MercatorCoordinate.fromLngLat([prevLon, prevLat], prevAlt || 0);
-              dx = p.x - prevP.x;
-              dy = p.y - prevP.y;
+              const prevCoord = coords[i - 1];
+              if (!prevCoord) { dx = 1; dy = 0; }
+              else {
+                const [prevLon, prevLat, prevAlt] = prevCoord;
+                const prevP = mapboxgl.MercatorCoordinate.fromLngLat([prevLon, prevLat], prevAlt || 0);
+                dx = p.x - prevP.x;
+                dy = p.y - prevP.y;
+              }
             } else {
               dx = 1; dy = 0;
             }
@@ -239,15 +249,21 @@ const useProcedureRendering = (
       proc.segments.forEach((seg) => {
         const coords = seg.coordinates;
         if (!coords || coords.length < 2) return;
-        [coords[0], coords[coords.length - 1]].forEach(coord => {
-          if (coord?.length >= 3) {
-            const key = `${coord[0].toFixed(4)}_${coord[1].toFixed(4)}`;
+        const firstCoord = coords[0];
+        const lastCoord = coords[coords.length - 1];
+        [firstCoord, lastCoord].forEach(coord => {
+          if (coord && coord.length >= 3) {
+            const lon = coord[0];
+            const lat = coord[1];
+            const alt = coord[2];
+            if (lon === undefined || lat === undefined || alt === undefined) return;
+            const key = `${lon.toFixed(4)}_${lat.toFixed(4)}`;
             if (!waypointMap.has(key)) {
               waypointMap.set(key, {
-                lon: coord[0],
-                lat: coord[1],
-                altitude_m: coord[2],
-                altitude_ft: Math.round(coord[2] / 0.3048),
+                lon,
+                lat,
+                altitude_m: alt,
+                altitude_ft: Math.round(alt / 0.3048),
                 color
               });
             }
@@ -258,17 +274,17 @@ const useProcedureRendering = (
 
     if (data.procedures?.SID) {
       Object.entries(data.procedures.SID).forEach(([k, p]) => {
-        if (sidVisible[k]) extractWaypoints(p, procColors.SID[k]);
+        if (sidVisible[k]) extractWaypoints(p, procColors.SID[k] ?? '#ffffff');
       });
     }
     if (data.procedures?.STAR) {
       Object.entries(data.procedures.STAR).forEach(([k, p]) => {
-        if (starVisible[k]) extractWaypoints(p, procColors.STAR[k]);
+        if (starVisible[k]) extractWaypoints(p, procColors.STAR[k] ?? '#ffffff');
       });
     }
     if (data.procedures?.APPROACH) {
       Object.entries(data.procedures.APPROACH).forEach(([k, p]) => {
-        if (apchVisible[k]) extractWaypoints(p, procColors.APPROACH[k]);
+        if (apchVisible[k]) extractWaypoints(p, procColors.APPROACH[k] ?? '#ffffff');
       });
     }
 
@@ -351,17 +367,17 @@ const useProcedureRendering = (
 
       if (data.procedures?.SID) {
         Object.entries(data.procedures.SID).forEach(([k, p]) => {
-          if (sidVisible[k]) render2DProcedure('sid', k, p, procColors.SID[k]);
+          if (sidVisible[k]) render2DProcedure('sid', k, p, procColors.SID[k] ?? '#ffffff');
         });
       }
       if (data.procedures?.STAR) {
         Object.entries(data.procedures.STAR).forEach(([k, p]) => {
-          if (starVisible[k]) render2DProcedure('star', k, p, procColors.STAR[k]);
+          if (starVisible[k]) render2DProcedure('star', k, p, procColors.STAR[k] ?? '#ffffff');
         });
       }
       if (data.procedures?.APPROACH) {
         Object.entries(data.procedures.APPROACH).forEach(([k, p]) => {
-          if (apchVisible[k]) render2DProcedure('apch', k, p, procColors.APPROACH[k]);
+          if (apchVisible[k]) render2DProcedure('apch', k, p, procColors.APPROACH[k] ?? '#ffffff');
         });
       }
     }

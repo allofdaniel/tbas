@@ -11,6 +11,7 @@ import {
   DEFAULT_TRAIL_DURATION,
 } from '../constants/config';
 import { ftToM } from '../utils/geometry';
+import { logger } from '../utils/logger';
 
 export interface AircraftData {
   hex: string;
@@ -139,12 +140,17 @@ export const useAircraft = (options: UseAircraftOptions = {}): UseAircraftReturn
       const now = Date.now();
       ac.trace.forEach((point: number[]) => {
         if (point && point.length >= 4) {
-          const timestamp = point[0] * 1000;
+          const ts = point[0];
+          const lat = point[1];
+          const lon = point[2];
+          const alt = point[3];
+          if (ts === undefined || lat === undefined || lon === undefined) return;
+          const timestamp = ts * 1000;
           if (now - timestamp <= trailDuration) {
             tracePoints.push({
-              lat: point[1],
-              lon: point[2],
-              altitude_m: ftToM(point[3] || 0),
+              lat,
+              lon,
+              altitude_m: ftToM(alt ?? 0),
               timestamp
             });
           }
@@ -152,7 +158,7 @@ export const useAircraft = (options: UseAircraftOptions = {}): UseAircraftReturn
       });
       return tracePoints;
     } catch (e) {
-      console.error(`Failed to load trace for ${hex}:`, e);
+      logger.error('Aircraft', `Failed to load trace for ${hex}`, { error: (e as Error).message });
       return null;
     }
   }, [trailDuration]);
@@ -178,12 +184,12 @@ export const useAircraft = (options: UseAircraftOptions = {}): UseAircraftReturn
           category: (ac.category as string) || 'A0',
           lat: ac.lat as number,
           lon: ac.lon as number,
-          altitude_ft: (ac.alt_baro as number) || (ac.alt_geom as number) || 0,
-          altitude_m: ftToM((ac.alt_baro as number) || (ac.alt_geom as number) || 0),
-          ground_speed: (ac.gs as number) || 0,
-          track: (ac.track as number) || 0,
+          altitude_ft: (ac.alt_baro as number) ?? (ac.alt_geom as number) ?? 0,
+          altitude_m: ftToM((ac.alt_baro as number) ?? (ac.alt_geom as number) ?? 0),
+          ground_speed: (ac.gs as number) ?? 0,
+          track: (ac.track as number) ?? 0,
           on_ground: ac.alt_baro === 'ground' || !!ac.ground,
-          vertical_rate: (ac.baro_rate as number) || (ac.geom_rate as number) || 0,
+          vertical_rate: (ac.baro_rate as number) ?? (ac.geom_rate as number) ?? 0,
           squawk: (ac.squawk as string) || '',
           emergency: (ac.emergency as string) || '',
           registration: (ac.r as string) || '',
@@ -191,13 +197,13 @@ export const useAircraft = (options: UseAircraftOptions = {}): UseAircraftReturn
           operator: (ac.ownOp as string) || '',
           origin: (ac.orig as string) || '',
           destination: (ac.dest as string) || '',
-          nav_altitude: (ac.nav_altitude_mcp as number) || (ac.nav_altitude_fms as number) || null,
-          nav_heading: (ac.nav_heading as number) || null,
-          ias: (ac.ias as number) || 0,
-          tas: (ac.tas as number) || 0,
-          mach: (ac.mach as number) || 0,
-          mag_heading: (ac.mag_heading as number) || (ac.track as number) || 0,
-          true_heading: (ac.true_heading as number) || (ac.track as number) || 0,
+          nav_altitude: (ac.nav_altitude_mcp as number) ?? (ac.nav_altitude_fms as number) ?? null,
+          nav_heading: (ac.nav_heading as number) ?? null,
+          ias: (ac.ias as number) ?? 0,
+          tas: (ac.tas as number) ?? 0,
+          mach: (ac.mach as number) ?? 0,
+          mag_heading: (ac.mag_heading as number) ?? (ac.track as number) ?? 0,
+          true_heading: (ac.true_heading as number) ?? (ac.track as number) ?? 0,
           timestamp: Date.now(),
         }));
 
@@ -236,6 +242,7 @@ export const useAircraft = (options: UseAircraftOptions = {}): UseAircraftReturn
         processed.forEach(ac => {
           if (!trails[ac.hex]) trails[ac.hex] = [];
           const trail = trails[ac.hex];
+          if (!trail) return;
           const last = trail[trail.length - 1];
           if (!last || last.lat !== ac.lat || last.lon !== ac.lon) {
             trail.push({
@@ -246,8 +253,10 @@ export const useAircraft = (options: UseAircraftOptions = {}): UseAircraftReturn
               timestamp: ac.timestamp
             });
           }
-          while (trail.length > 0 && Date.now() - trail[0].timestamp > trailDuration) {
+          let firstPoint = trail[0];
+          while (trail.length > 0 && firstPoint && Date.now() - firstPoint.timestamp > trailDuration) {
             trail.shift();
+            firstPoint = trail[0];
           }
         });
         const activeHexes = new Set(processed.map(ac => ac.hex));
@@ -259,7 +268,7 @@ export const useAircraft = (options: UseAircraftOptions = {}): UseAircraftReturn
 
       setAircraft(processed);
     } catch (e) {
-      console.error('Aircraft fetch failed:', e);
+      logger.error('Aircraft', 'Aircraft fetch failed', { error: (e as Error).message });
     }
   }, [airport, trailDuration, tracesLoaded, loadAircraftTrace]);
 

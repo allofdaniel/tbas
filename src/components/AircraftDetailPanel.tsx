@@ -142,13 +142,27 @@ interface GraphHoverData {
 interface DataWithAirport {
   airport?: AirportInfo;
   waypoints?: Record<string, { lat: number; lon: number; ident: string }>;
-  procedures?: unknown;
+  procedures?: Record<string, unknown>;
+}
+
+interface AtcSector {
+  id: string;
+  name: string;
+  operator?: string;
+  vertical_limits?: string;
+  airspace_class?: string;
+  frequencies?: string[];
+  color?: string;
+  coordinates?: [number, number][];
+  floor_ft?: number;
+  ceiling_ft?: number;
 }
 
 interface AtcData {
-  ACC?: unknown[];
-  TMA?: unknown[];
-  CTR?: unknown[];
+  FIR?: AtcSector;
+  ACC?: AtcSector[];
+  TMA?: AtcSector[];
+  CTR?: AtcSector[];
 }
 
 // Photo Section Props
@@ -375,6 +389,7 @@ const TakeoffLandingSection: React.FC<TakeoffLandingSectionProps> = ({
 
     if (historicalData.length > 0 && realtimeData.length > 0) {
       const lastHistorical = historicalData[historicalData.length - 1];
+      if (!lastHistorical) return null;
       const lastHistTime = lastHistorical.time ? lastHistorical.time * 1000 : lastHistorical.timestamp || 0;
 
       const newerRealtimeData = realtimeData.filter(rt => {
@@ -390,6 +405,7 @@ const TakeoffLandingSection: React.FC<TakeoffLandingSectionProps> = ({
     let startIdx = 0;
     for (let i = 0; i < Math.min(trackData.length, 20); i++) {
       const pt = trackData[i];
+      if (!pt) continue;
       const altFt = pt.altitude_ft !== undefined ? pt.altitude_ft : (pt.altitude_m ? pt.altitude_m * 3.28084 : 0);
       if (pt.on_ground === true || altFt < 100) {
         startIdx = i + 1;
@@ -403,6 +419,7 @@ const TakeoffLandingSection: React.FC<TakeoffLandingSectionProps> = ({
 
     if (trackData.length > 0) {
       const firstPoint = trackData[0];
+      if (!firstPoint) return null;
       const timestamp = firstPoint.time ? firstPoint.time * 1000 : firstPoint.timestamp;
       return timestamp || null;
     }
@@ -828,6 +845,7 @@ const AltitudeGraphSection: React.FC<AltitudeGraphSectionProps> = ({
 
   if (historicalData.length > 0 && realtimeData.length > 0) {
     const lastHistorical = historicalData[historicalData.length - 1];
+    if (!lastHistorical) return null;
     const lastHistTime = lastHistorical.time ? lastHistorical.time * 1000 : lastHistorical.timestamp || 0;
 
     const newerRealtimeData = realtimeData.filter(rt => {
@@ -845,6 +863,7 @@ const AltitudeGraphSection: React.FC<AltitudeGraphSectionProps> = ({
   let startIdx = 0;
   for (let i = 0; i < Math.min(trackData.length, 20); i++) {
     const pt = trackData[i];
+    if (!pt) continue;
     if (pt.on_ground === true || (pt.altitude_ft !== undefined && pt.altitude_ft < 100)) {
       startIdx = i + 1;
     } else {
@@ -877,6 +896,7 @@ const AltitudeGraphSection: React.FC<AltitudeGraphSectionProps> = ({
   const handleTouchMove = (e: React.TouchEvent<SVGSVGElement>): void => {
     e.preventDefault();
     const touch = e.touches[0];
+    if (!touch) return;
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
     const x = ((touch.clientX - rect.left) / rect.width) * 320;
@@ -937,6 +957,7 @@ const AltitudeGraphSection: React.FC<AltitudeGraphSectionProps> = ({
     const validAltData = trackData.filter(t => typeof t.altitude_ft === 'number' && !isNaN(t.altitude_ft) && t.altitude_ft >= 0);
     if (validAltData.length < 2) return null;
     const fp = validAltData[0], lp = validAltData[validAltData.length - 1];
+    if (!fp || !lp) return null;
 
     const fpTimestamp = fp.time ? fp.time * 1000 : fp.timestamp || 0;
     const lpTimestamp = lp.time ? lp.time * 1000 : lp.timestamp || 0;
@@ -1039,8 +1060,9 @@ const PositionSection: React.FC<PositionSectionProps> = ({ displayAircraft }) =>
 
 /**
  * Main Aircraft Detail Panel Component
+ * DO-278A 요구사항 추적: SRS-PERF-002
  */
-const AircraftDetailPanel: React.FC<AircraftDetailPanelProps> = ({
+const AircraftDetailPanel: React.FC<AircraftDetailPanelProps> = React.memo(({
   showAircraftPanel,
   setShowAircraftPanel,
   selectedAircraft,
@@ -1158,6 +1180,7 @@ const AircraftDetailPanel: React.FC<AircraftDetailPanelProps> = ({
       )}
     </div>
   );
-};
+});
+AircraftDetailPanel.displayName = 'AircraftDetailPanel';
 
 export default AircraftDetailPanel;

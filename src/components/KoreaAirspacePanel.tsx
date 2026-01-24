@@ -5,18 +5,7 @@
 import React from 'react';
 import Accordion from './Accordion';
 import ToggleItem from './ToggleItem';
-
-interface KoreaAirspaceMetadata {
-  airac?: string;
-}
-
-interface KoreaAirspaceData {
-  routes?: unknown[];
-  waypoints?: unknown[];
-  navaids?: unknown[];
-  airspaces?: unknown[];
-  metadata?: KoreaAirspaceMetadata;
-}
+import type { KoreaAirspaceData } from '../hooks/useDataLoading';
 
 interface KoreaAirspacePanelProps {
   koreaAirspaceData: KoreaAirspaceData | null;
@@ -35,7 +24,7 @@ interface KoreaAirspacePanelProps {
 /**
  * Korea Airspace Panel Component
  */
-const KoreaAirspacePanel: React.FC<KoreaAirspacePanelProps> = ({
+const KoreaAirspacePanel: React.FC<KoreaAirspacePanelProps> = React.memo(({
   koreaAirspaceData,
   koreaRoutesExpanded,
   setKoreaRoutesExpanded,
@@ -86,6 +75,8 @@ const KoreaAirspacePanel: React.FC<KoreaAirspacePanelProps> = ({
       </div>
     </Accordion>
   );
-};
+});
+
+KoreaAirspacePanel.displayName = 'KoreaAirspacePanel';
 
 export default KoreaAirspacePanel;

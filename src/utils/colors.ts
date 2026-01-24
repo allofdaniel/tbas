@@ -149,9 +149,10 @@ export const FLIGHT_CATEGORY_COLORS: Record<string, string> = {
 /**
  * 항공기 타입으로 색상 가져오기
  */
+const DEFAULT_AIRCRAFT_COLOR = '#8bc34a';
 export const getAircraftColor = (type: string | undefined): string => {
-  if (!type) return AIRCRAFT_COLORS.default;
-  return AIRCRAFT_COLORS[type] || AIRCRAFT_COLORS.default;
+  if (!type) return DEFAULT_AIRCRAFT_COLOR;
+  return AIRCRAFT_COLORS[type] ?? DEFAULT_AIRCRAFT_COLOR;
 };
 
 /**

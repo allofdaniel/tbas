@@ -14,12 +14,12 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting - relaxed for migration */
+    /* Linting - strict mode (DO-278A compliance) */
     "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": false,
+    "noUncheckedIndexedAccess": true,
 
     /* Path Aliases */
     "baseUrl": ".",

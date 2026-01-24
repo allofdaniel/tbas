@@ -5,6 +5,7 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { MAP_STYLES } from '../constants/config';
+import { logger } from '../utils/logger';
 
 export interface UseMapStyleOptions {
   map: MutableRefObject<MapboxMap | null>;
@@ -106,7 +107,7 @@ const useMapStyle = ({
           });
         }
       } catch {
-        console.debug('3D buildings skipped - no composite source');
+        logger.debug('MapStyle', '3D buildings skipped - no composite source');
       }
 
       // Add runway source and layer
@@ -149,7 +150,8 @@ const useMapStyle = ({
       if (!map.current.getLayer(blackBgLayerId)) {
         // 맨 아래에 검은 배경 레이어 추가
         const layers = map.current.getStyle()?.layers || [];
-        const firstLayerId = layers.length > 0 ? layers[0].id : undefined;
+        const firstLayer = layers[0];
+        const firstLayerId = firstLayer ? firstLayer.id : undefined;
 
         map.current.addLayer({
           id: blackBgLayerId,

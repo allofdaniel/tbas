@@ -1,3 +1,6 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+// Mapbox GL dependencies are intentionally excluded from useEffect deps
+
 import { useEffect, useState, type MutableRefObject } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { MetarData } from '../utils/weather';
@@ -185,6 +188,7 @@ export default function useWeatherLayers(
 
         // Move head
         const head = thread.points[0];
+        if (!head) return;
         const wobble = (Math.random() - 0.5) * 0.00002;
         const newLon = head[0] + Math.sin(windRad) * baseSpeed * thread.speed + Math.cos(windRad) * wobble;
         const newLat = head[1] + Math.cos(windRad) * baseSpeed * thread.speed - Math.sin(windRad) * wobble;
@@ -346,11 +350,13 @@ export default function useWeatherLayers(
                       sig.hazard === 'TS' || sig.hazard === 'CONVECTIVE' ? '#f44336' :
                       sig.hazard === 'VA' ? '#9c27b0' : '#ff5722';
 
+        const firstCoord = sig.coords[0];
+        if (!firstCoord) return;
         features.push({
           type: 'Feature',
           geometry: {
             type: 'Polygon',
-            coordinates: [sig.coords.map(c => [c.lon, c.lat]).concat([[sig.coords[0].lon, sig.coords[0].lat]])]
+            coordinates: [sig.coords.map(c => [c.lon, c.lat]).concat([[firstCoord.lon, firstCoord.lat]])]
           },
           properties: {
             type: sig.hazard || 'SIGMET',
@@ -420,10 +426,12 @@ export default function useWeatherLayers(
         const data: RadarApiData = await response.json();
         if (data?.radar?.past?.length && data.radar.past.length > 0) {
           const latestFrame = data.radar.past[data.radar.past.length - 1];
-          setRadarTimestamp(latestFrame.path);
+          if (latestFrame) {
+            setRadarTimestamp(latestFrame.path);
+          }
         }
-      } catch (e) {
-        console.error('Failed to fetch radar data:', e);
+      } catch {
+        // Radar data fetch failed - silently ignore
       }
     };
 

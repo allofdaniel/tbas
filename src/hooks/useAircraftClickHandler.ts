@@ -18,9 +18,13 @@ export default function useAircraftClickHandler(
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
+    // Capture current map reference for cleanup
+    const mapInstance = map.current;
+
     const handleAircraftClick = (e: MapMouseEvent & { features?: GeoJSON.Feature[] }) => {
-      if (e.features && e.features.length > 0) {
-        const hex = e.features[0].properties?.hex as string | undefined;
+      const feature = e.features?.[0];
+      if (feature) {
+        const hex = feature.properties?.hex as string | undefined;
         if (hex) {
           // 토글 방식: 같은 항공기 클릭 시 선택 해제
           if (selectedAircraft?.hex === hex) {
@@ -68,11 +72,11 @@ export default function useAircraftClickHandler(
     map.current.on('click', handleMapClick);
 
     return () => {
-      if (map.current) {
+      if (mapInstance) {
         try {
-          map.current.off('click', 'aircraft-labels', handleAircraftClick as (e: MapMouseEvent) => void);
-          map.current.off('click', 'aircraft-trails-3d', handleAircraftClick as (e: MapMouseEvent) => void);
-          map.current.off('click', handleMapClick);
+          mapInstance.off('click', 'aircraft-labels', handleAircraftClick as (e: MapMouseEvent) => void);
+          mapInstance.off('click', 'aircraft-trails-3d', handleAircraftClick as (e: MapMouseEvent) => void);
+          mapInstance.off('click', handleMapClick);
         } catch {
           // Ignore cleanup errors
         }

@@ -136,7 +136,7 @@ body {
 
 .stat-label {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2; /* Improved contrast: #9aa0a6 -> #b8bdc2 for WCAG AA compliance */
   text-transform: uppercase;
 }
 
@@ -215,7 +215,7 @@ body {
 
 .toggle-count {
   font-size: 11px;
-  color: #9aa0a6;
+  color: #b8bdc2; /* Improved contrast for WCAG AA compliance */
   margin-left: 8px;
   background: rgba(255,255,255,0.1);
   padding: 2px 6px;
@@ -234,7 +234,7 @@ body {
 .korea-airspace-info {
   padding: 8px 12px;
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   background: rgba(0,0,0,0.2);
   border-radius: 4px;
   margin-top: 4px;
@@ -261,7 +261,7 @@ body {
 
 .info-sub {
   font-size: 11px;
-  color: #9aa0a6;
+  color: #b8bdc2; /* Improved contrast for WCAG AA compliance */
   margin-top: 4px;
 }
 
@@ -294,7 +294,7 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #b0b0b0;
+  color: #c0c5ca; /* Improved contrast: #b0b0b0 -> #c0c5ca for WCAG AA compliance */
 }
 
 .legend-color {
@@ -343,7 +343,7 @@ body {
 }
 
 .popup-label {
-  color: #9aa0a6;
+  color: #b8bdc2; /* Improved contrast for WCAG AA compliance */
 }
 
 .popup-value {
@@ -698,7 +698,7 @@ body {
 
 .trail-duration-label {
   font-size: 12px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   white-space: nowrap;
 }
 
@@ -794,7 +794,7 @@ body {
 
 .flight-category.unknown {
   background: rgba(255, 255, 255, 0.2);
-  color: #9aa0a6;
+  color: #b8bdc2;
 }
 
 .weather-grid {
@@ -816,7 +816,7 @@ body {
 
 .weather-label {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   text-transform: uppercase;
 }
 
@@ -847,7 +847,7 @@ body {
 .metar-raw-text {
   font-size: 11px;
   font-family: 'SF Mono', 'Consolas', monospace;
-  color: #b0b0b0;
+  color: #c0c5ca;
   word-break: break-all;
   line-height: 1.4;
 }
@@ -855,7 +855,7 @@ body {
 .weather-update-time {
   margin-top: 8px;
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   text-align: right;
 }
 
@@ -974,7 +974,7 @@ body {
 }
 
 .wx-item {
-  color: #b0b0b0;
+  color: #c0c5ca;
   font-family: 'SF Mono', 'Consolas', monospace;
   cursor: help;
 }
@@ -1020,7 +1020,7 @@ body {
 .metar-text {
   font-size: 10px;
   font-family: 'SF Mono', 'Consolas', monospace;
-  color: #9aa0a6;
+  color: #b8bdc2;
   word-break: break-all;
   line-height: 1.3;
 }
@@ -1132,7 +1132,7 @@ body {
 
 .hint {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   font-weight: 400;
 }
 
@@ -1144,7 +1144,7 @@ body {
   border-radius: 12px;
   font-size: 10px;
   font-family: 'SF Mono', 'Consolas', monospace;
-  color: #9aa0a6;
+  color: #b8bdc2;
   max-width: 600px;
   text-align: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -1348,7 +1348,7 @@ body {
 
 .detail-label {
   font-size: 9px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   text-transform: uppercase;
 }
 
@@ -1392,7 +1392,7 @@ body {
 }
 
 .mc-item b {
-  color: #9aa0a6;
+  color: #b8bdc2;
   font-weight: 600;
   margin-right: 4px;
 }
@@ -1600,7 +1600,7 @@ body {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -1664,14 +1664,14 @@ body {
 
 .wx-count {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   font-weight: 500;
 }
 
 .wx-no-data {
   padding: 20px;
   text-align: center;
-  color: #9aa0a6;
+  color: #b8bdc2;
   font-size: 12px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 8px;
@@ -1752,7 +1752,7 @@ body {
 
 .sigmet-fir {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   font-weight: 500;
 }
 
@@ -1766,14 +1766,14 @@ body {
   display: flex;
   gap: 12px;
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   margin-bottom: 6px;
 }
 
 .sigmet-raw {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 9px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1803,7 +1803,7 @@ body {
 
 .notam-type {
   font-size: 9px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   text-transform: uppercase;
 }
 
@@ -1849,7 +1849,7 @@ body {
 
 .lightning-time {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
 }
 
 /* Legend */
@@ -1861,7 +1861,7 @@ body {
 
 .legend-title {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   margin-bottom: 8px;
   text-transform: uppercase;
 }
@@ -1990,7 +1990,7 @@ body {
 .upper-wind-close {
   background: none;
   border: none;
-  color: #9aa0a6;
+  color: #b8bdc2;
   font-size: 20px;
   cursor: pointer;
   padding: 4px 8px;
@@ -2005,7 +2005,7 @@ body {
 
 .upper-wind-time {
   font-size: 11px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   margin-bottom: 12px;
 }
 
@@ -2046,7 +2046,7 @@ body {
 
 .wind-level-alt {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   margin-bottom: 8px;
 }
 
@@ -2230,7 +2230,7 @@ body {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 5px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -2292,7 +2292,7 @@ body {
 
 .atc-expand-icon {
   font-size: 8px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   transition: transform 0.2s;
 }
 
@@ -2532,7 +2532,7 @@ body {
 }
 
 .notam-search-input::placeholder {
-  color: #9aa0a6;
+  color: #b8bdc2;
 }
 
 .notam-search-input:focus {
@@ -2549,7 +2549,7 @@ body {
 
 .notam-map-toggle-label {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   display: block;
   margin-bottom: 6px;
 }
@@ -2566,7 +2566,7 @@ body {
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(255, 255, 255, 0.05);
-  color: #9aa0a6;
+  color: #b8bdc2;
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -2653,7 +2653,7 @@ body {
 
 .notam-subgroup-label {
   font-size: 9px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   display: block;
   margin-bottom: 4px;
 }
@@ -2664,7 +2664,7 @@ body {
   border-radius: 8px;
   border: 1px dashed rgba(255, 255, 255, 0.2);
   background: transparent;
-  color: #9aa0a6;
+  color: #b8bdc2;
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -2743,7 +2743,7 @@ body {
   padding: 20px;
   text-align: center;
   font-size: 12px;
-  color: #9aa0a6;
+  color: #b8bdc2;
 }
 
 .notam-error {
@@ -2895,7 +2895,7 @@ body {
 }
 
 .notam-no-coords-label {
-  color: #9aa0a6;
+  color: #b8bdc2;
   font-weight: 500;
 }
 
@@ -2929,7 +2929,7 @@ body {
 
 .notam-expand-icon {
   font-size: 8px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   transition: transform 0.2s;
 }
 
@@ -2953,7 +2953,7 @@ body {
 
 .notam-label {
   font-weight: 500;
-  color: #9aa0a6;
+  color: #b8bdc2;
   min-width: 60px;
 }
 
@@ -2989,7 +2989,7 @@ body {
 
 .notam-count {
   font-size: 10px;
-  color: #9aa0a6;
+  color: #b8bdc2;
 }
 
 .notam-update-time {
@@ -3863,7 +3863,7 @@ body {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #9aa0a6;
+  color: #b8bdc2;
   margin-bottom: 4px;
 }
 

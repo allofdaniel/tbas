@@ -40,6 +40,34 @@ export const nmToM = (nm: number): number => nm * 1852;
 export const mToNm = (m: number): number => m / 1852;
 
 /**
+ * 위도 유효성 검사 (-90 ~ 90)
+ */
+export const isValidLatitude = (lat: unknown): lat is number => {
+  return typeof lat === 'number' && !isNaN(lat) && lat >= -90 && lat <= 90;
+};
+
+/**
+ * 경도 유효성 검사 (-180 ~ 180)
+ */
+export const isValidLongitude = (lon: unknown): lon is number => {
+  return typeof lon === 'number' && !isNaN(lon) && lon >= -180 && lon <= 180;
+};
+
+/**
+ * 좌표 유효성 검사
+ */
+export const isValidCoordinate = (lat: unknown, lon: unknown): boolean => {
+  return isValidLatitude(lat) && isValidLongitude(lon);
+};
+
+/**
+ * 고도 유효성 검사 (feet, -2000 ~ 100000)
+ */
+export const isValidAltitude = (alt: unknown): alt is number => {
+  return typeof alt === 'number' && !isNaN(alt) && alt >= -2000 && alt <= 100000;
+};
+
+/**
  * 원형 폴리곤 좌표 생성
  */
 export const createCirclePolygon = (
@@ -163,7 +191,7 @@ export const calculateBearing = (
   const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
             Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
 
-  let bearing = Math.atan2(y, x) * 180 / Math.PI;
+  const bearing = Math.atan2(y, x) * 180 / Math.PI;
   return (bearing + 360) % 360;
 };
 
@@ -176,8 +204,12 @@ export const isPointInPolygon = (point: Coordinate, polygon: PolygonCoordinates)
   let inside = false;
 
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i][0], yi = polygon[i][1];
-    const xj = polygon[j][0], yj = polygon[j][1];
+    const pi = polygon[i];
+    const pj = polygon[j];
+    if (!pi || !pj) continue;
+
+    const xi = pi[0], yi = pi[1];
+    const xj = pj[0], yj = pj[1];
 
     const intersect = ((yi > y) !== (yj > y)) &&
                       (x < (xj - xi) * (y - yi) / (yj - yi) + xi);

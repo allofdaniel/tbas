@@ -5,6 +5,9 @@
  * Mapbox GL 지도 컨테이너 컴포넌트
  */
 
+/* eslint-disable react-hooks/exhaustive-deps */
+// Mapbox GL dependencies are intentionally excluded from useEffect deps
+
 import { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -34,11 +37,17 @@ export function MapContainer({
   const containerRef = useRef<HTMLDivElement>(null);
   const { mapRef, setMapLoaded, mapStyle, viewState } = useMapContext();
 
+  // Mapbox 토큰 여부 상태
+  const hasToken = Boolean(MAPBOX_ACCESS_TOKEN);
+
   /**
    * 지도 초기화
+   * DO-278A: Hooks는 조건부 return 전에 호출되어야 함
    */
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    // 토큰 없으면 초기화 건너뜀
+    if (!hasToken) return;
+    if (!containerRef.current || mapRef.current || !hasToken) return;
 
     const styleSpec = MAP_STYLES[mapStyle];
 
@@ -104,19 +113,50 @@ export function MapContainer({
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [hasToken]);
 
   /**
    * 스타일 변경 처리
    */
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !hasToken) return;
 
     const styleSpec = MAP_STYLES[mapStyle];
     mapRef.current.setStyle(
       typeof styleSpec === 'string' ? styleSpec : (JSON.parse(JSON.stringify(styleSpec)) as mapboxgl.Style)
     );
-  }, [mapStyle]);
+  }, [mapStyle, hasToken]);
+
+  // Mapbox 토큰 검증 - Hooks 호출 후 조건부 렌더링
+  if (!hasToken) {
+    return (
+      <div
+        className={`map-container ${className}`}
+        style={{
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#1a1a2e',
+          color: '#fff',
+          padding: '2rem',
+          textAlign: 'center',
+          ...style,
+        }}
+      >
+        <h2 style={{ color: '#ff6b6b', marginBottom: '1rem' }}>Mapbox 설정 오류</h2>
+        <p style={{ marginBottom: '0.5rem' }}>VITE_MAPBOX_ACCESS_TOKEN 환경변수가 설정되지 않았습니다.</p>
+        <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+          .env 파일에 Mapbox 토큰을 추가하세요.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div

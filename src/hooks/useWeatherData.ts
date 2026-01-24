@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { MetarData } from '../utils/weather';
+import { logger } from '../utils/logger';
 
 interface AirportInfo {
   lat: number;
@@ -89,7 +90,7 @@ export default function useWeatherData(
         metarData = metarJson?.[0] || null;
         tafData = tafJson?.[0] || null;
       } catch (apiError) {
-        console.log('Weather API failed, trying local fallback:', (apiError as Error).message);
+        logger.debug('Weather', 'API failed, trying local fallback', { error: (apiError as Error).message });
         // Fallback to local mock data
         try {
           const fallbackRes = await fetch('/data/weather.json');
@@ -98,10 +99,10 @@ export default function useWeatherData(
             metarData = fallbackJson?.metar?.[0] || null;
             tafData = fallbackJson?.taf?.[0] || null;
             usedFallback = true;
-            console.log('Using local demo weather data');
+            logger.info('Weather', 'Using local demo weather data');
           }
         } catch (fallbackError) {
-          console.error('Weather fallback also failed:', (fallbackError as Error).message);
+          logger.error('Weather', 'Fallback also failed', fallbackError as Error);
         }
       }
 
@@ -109,7 +110,7 @@ export default function useWeatherData(
         setWeatherData({ metar: metarData, taf: tafData, source: usedFallback ? 'local-demo' : 'api' });
       }
     } catch (e) {
-      console.error('Weather fetch failed:', e);
+      logger.error('Weather', 'Fetch failed', e as Error);
     }
   }, []);
 

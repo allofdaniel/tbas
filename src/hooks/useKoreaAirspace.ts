@@ -157,6 +157,7 @@ const useKoreaAirspace = (
         for (let i = 0; i < route.points.length - 1; i++) {
           const p1 = route.points[i];
           const p2 = route.points[i + 1];
+          if (!p1 || !p2) continue;
           const ribbon = createRouteRibbon(p1, p2, 0.004);
           if (!ribbon) continue;
           const alt1 = clampMEA(p1.mea_ft);
@@ -242,7 +243,8 @@ const useKoreaAirspace = (
           if (route.points) {
             route.points.forEach(p => {
               if (p.name && p.mea_ft && p.mea_ft > 0 && p.mea_ft <= 60000) {
-                if (!waypointAltitudes[p.name] || waypointAltitudes[p.name] < p.mea_ft) {
+                const currentAlt = waypointAltitudes[p.name];
+                if (!currentAlt || currentAlt < p.mea_ft) {
                   waypointAltitudes[p.name] = p.mea_ft;
                 }
               }
@@ -483,8 +485,12 @@ const useKoreaAirspace = (
           if (boundary.length > 0) {
             const first = boundary[0];
             const last = boundary[boundary.length - 1];
-            if (first[0] !== last[0] || first[1] !== last[1]) {
-              boundary.push([first[0], first[1]]);
+            if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+              const f0 = first[0];
+              const f1 = first[1];
+              if (f0 !== undefined && f1 !== undefined) {
+                boundary.push([f0, f1]);
+              }
             }
           }
           return {

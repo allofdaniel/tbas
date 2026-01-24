@@ -156,24 +156,31 @@ const useAirspaceLayers = (
     }
 
     // Obstacles
+    const DEFAULT_OBSTACLE_COLOR = '#607D8B'; // Unknown color
     if (showObstacles && data.obstacles) {
       const filteredObstacles = data.obstacles.filter(obs => obs.height_m > 0);
       if (is3DView && show3DAltitude) {
-        const features3d: ObstacleFeature3D[] = filteredObstacles.map((obs) => ({
-          type: 'Feature',
-          geometry: { type: 'Polygon', coordinates: [createObstacleShape(obs)] },
-          properties: { height: obs.height_m, color: OBSTACLE_COLORS[obs.type as keyof typeof OBSTACLE_COLORS] || OBSTACLE_COLORS.Unknown }
-        }));
+        const features3d: ObstacleFeature3D[] = filteredObstacles.map((obs) => {
+          const obstacleColor = OBSTACLE_COLORS[obs.type] ?? DEFAULT_OBSTACLE_COLOR;
+          return {
+            type: 'Feature' as const,
+            geometry: { type: 'Polygon' as const, coordinates: [createObstacleShape(obs)] },
+            properties: { height: obs.height_m, color: obstacleColor }
+          };
+        });
         if (features3d.length > 0) {
           map.current.addSource('obstacles-3d', { type: 'geojson', data: { type: 'FeatureCollection', features: features3d } });
           map.current.addLayer({ id: 'obstacles-3d', type: 'fill-extrusion', source: 'obstacles-3d', paint: { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'height'], 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 0.85 } });
         }
       } else {
-        const features2d: ObstacleFeature2D[] = filteredObstacles.map((obs) => ({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [obs.lon, obs.lat] },
-          properties: { color: OBSTACLE_COLORS[obs.type as keyof typeof OBSTACLE_COLORS] || OBSTACLE_COLORS.Unknown }
-        }));
+        const features2d: ObstacleFeature2D[] = filteredObstacles.map((obs) => {
+          const obstacleColor = OBSTACLE_COLORS[obs.type] ?? DEFAULT_OBSTACLE_COLOR;
+          return {
+            type: 'Feature' as const,
+            geometry: { type: 'Point' as const, coordinates: [obs.lon, obs.lat] as [number, number] },
+            properties: { color: obstacleColor }
+          };
+        });
         if (features2d.length > 0) {
           map.current.addSource('obstacles-2d', { type: 'geojson', data: { type: 'FeatureCollection', features: features2d } });
           map.current.addLayer({ id: 'obstacles-2d', type: 'circle', source: 'obstacles-2d', paint: { 'circle-radius': 5, 'circle-color': ['get', 'color'], 'circle-stroke-width': 1, 'circle-stroke-color': '#000' } });

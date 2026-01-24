@@ -61,6 +61,7 @@ const useRadarLayer = (
 
     if (showRadar && radarData?.radar?.past?.length && radarData.radar.past.length > 0) {
       const latestFrame = radarData.radar.past[radarData.radar.past.length - 1];
+      if (!latestFrame) return;
       // 프록시 API를 통해 CORS 문제 해결
       const proxyPath = `${latestFrame.path}/256/{z}/{x}/{y}/4/1_1.png`;
       const tileUrl = `/api/radar-tile?path=${proxyPath}`;

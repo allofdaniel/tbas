@@ -68,7 +68,8 @@ export function calculateChartBounds(
   const arp = AIRPORT_COORDINATES[airport];
   if (!arp) return null;
 
-  const scale = CHART_TYPE_SCALES[chartType] || CHART_TYPE_SCALES.OTHER;
+  const scale = CHART_TYPE_SCALES[chartType] ?? CHART_TYPE_SCALES.OTHER;
+  if (!scale) return null;
 
   return {
     north: arp.lat + scale.latScale,
@@ -222,7 +223,7 @@ export function getMockChartData(airport: string): ChartData[] {
   const chartTypes = ['ADC', 'SID', 'STAR', 'IAC', 'VAC'];
   const runways = ['18', '36'];
 
-  chartTypes.forEach((type, idx) => {
+  chartTypes.forEach((type) => {
     if (['SID', 'STAR', 'IAC'].includes(type)) {
       // Multiple charts for different runways
       runways.forEach((rwy) => {
