@@ -13,7 +13,6 @@ export interface UseMapStyleOptions {
   setMapLoaded: React.Dispatch<React.SetStateAction<boolean>>;
   isDarkMode: boolean;
   showSatellite: boolean;
-  atcOnlyMode: boolean;
   radarBlackBackground: boolean;
   is3DView: boolean;
   showTerrain: boolean;
@@ -26,7 +25,6 @@ const useMapStyle = ({
   setMapLoaded,
   isDarkMode,
   showSatellite,
-  atcOnlyMode,
   radarBlackBackground,
   is3DView,
   showTerrain,
@@ -138,59 +136,33 @@ const useMapStyle = ({
     });
   }, [map, isDarkMode, showSatellite, mapLoaded, setMapLoaded, is3DView, showTerrain, show3DAltitude]);
 
-  // Handle black background toggle - 레이어만 추가/제거 (전체 스타일 변경 없음)
+  // Handle black background toggle - 단순 오버레이 방식
   useEffect(() => {
     if (!map?.current || !mapLoaded) return;
     if (!map.current.isStyleLoaded()) return;
 
-    const blackBgLayerId = 'radar-black-background';
+    const blackOverlayId = 'radar-black-overlay';
 
-    if (atcOnlyMode && radarBlackBackground) {
-      // 검은 배경 레이어 추가
-      if (!map.current.getLayer(blackBgLayerId)) {
-        // 맨 아래에 검은 배경 레이어 추가
-        const layers = map.current.getStyle()?.layers || [];
-        const firstLayer = layers[0];
-        const firstLayerId = firstLayer ? firstLayer.id : undefined;
-
+    // radarBlackBackground가 true면 검은 오버레이 표시
+    if (radarBlackBackground) {
+      if (!map.current.getLayer(blackOverlayId)) {
+        // 맨 위에 반투명 검은 오버레이 추가 (기존 레이어 숨기지 않음)
         map.current.addLayer({
-          id: blackBgLayerId,
+          id: blackOverlayId,
           type: 'background',
-          paint: { 'background-color': '#000000' }
-        }, firstLayerId);
+          paint: {
+            'background-color': '#000000',
+            'background-opacity': 0.85  // 약간 투명하게
+          }
+        });
       }
-
-      // 기존 맵 레이어 숨기기
-      const layers = map.current.getStyle()?.layers || [];
-      layers.forEach(layer => {
-        if (layer.id !== blackBgLayerId &&
-            !layer.id.startsWith('radar-') &&
-            !layer.id.startsWith('atc-') &&
-            !layer.id.startsWith('aircraft') &&
-            layer.id !== 'runway' &&
-            layer.id !== 'sky') {
-          try {
-            map.current?.setLayoutProperty(layer.id, 'visibility', 'none');
-          } catch { /* ignore */ }
-        }
-      });
     } else {
-      // 검은 배경 레이어 제거
-      if (map.current.getLayer(blackBgLayerId)) {
-        map.current.removeLayer(blackBgLayerId);
+      // 오버레이 제거
+      if (map.current.getLayer(blackOverlayId)) {
+        map.current.removeLayer(blackOverlayId);
       }
-
-      // 기존 맵 레이어 보이기
-      const layers = map.current.getStyle()?.layers || [];
-      layers.forEach(layer => {
-        if (layer.id !== blackBgLayerId) {
-          try {
-            map.current?.setLayoutProperty(layer.id, 'visibility', 'visible');
-          } catch { /* ignore */ }
-        }
-      });
     }
-  }, [map, atcOnlyMode, radarBlackBackground, mapLoaded]);
+  }, [map, radarBlackBackground, mapLoaded]);
 
   // Handle 2D/3D toggle
   useEffect(() => {

@@ -194,7 +194,7 @@ function App() {
   // Map style hook
   useMapStyle({
     map, mapLoaded, setMapLoaded,
-    isDarkMode, showSatellite, atcOnlyMode, radarBlackBackground,
+    isDarkMode, showSatellite, radarBlackBackground,
     is3DView, showTerrain, show3DAltitude
   });
 
@@ -343,6 +343,41 @@ function App() {
   // ============================================
   // Render
   // ============================================
+
+  // Mapbox 토큰 검증
+  if (!MAPBOX_ACCESS_TOKEN) {
+    return (
+      <div
+        className="app-container dark-mode"
+        style={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#1a1a2e',
+          color: '#fff',
+          padding: '2rem',
+          textAlign: 'center',
+        }}
+      >
+        <h2 style={{ color: '#ff6b6b', marginBottom: '1rem' }}>Mapbox 설정 오류</h2>
+        <p style={{ marginBottom: '0.5rem' }}>VITE_MAPBOX_ACCESS_TOKEN 환경변수가 설정되지 않았습니다.</p>
+        <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+          .env 파일에 Mapbox 토큰을 추가하세요.
+        </p>
+        <code style={{
+          backgroundColor: '#2a2a3e',
+          padding: '1rem',
+          borderRadius: '8px',
+          marginTop: '1rem',
+          fontSize: '0.85rem'
+        }}>
+          VITE_MAPBOX_ACCESS_TOKEN=pk.your_token_here
+        </code>
+      </div>
+    );
+  }
 
   return (
     <div

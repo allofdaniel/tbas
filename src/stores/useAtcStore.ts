@@ -45,7 +45,7 @@ const useAtcStore = create<AtcStore>((set) => ({
   // Radar view mode
   atcOnlyMode: false,
   radarRange: 100, // nm
-  radarBlackBackground: true,
+  radarBlackBackground: false,  // 기본값: 검은 배경 꺼짐
 
   // Selected sectors
   selectedAtcSectors: new Set(),
@@ -85,11 +85,11 @@ const useAtcStore = create<AtcStore>((set) => ({
   }),
   clearAllSectors: () => set({ selectedAtcSectors: new Set() }),
 
-  // Enable radar mode with default settings
+  // Enable radar mode (설정 자동 변경 없음)
   enableRadarMode: (mapRef) => {
     set({
       atcOnlyMode: true,
-      radarBlackBackground: true,
+      // radarBlackBackground는 사용자가 직접 토글
     });
     if (mapRef?.current) {
       mapRef.current.flyTo({
@@ -106,7 +106,7 @@ const useAtcStore = create<AtcStore>((set) => ({
   resetRadarSettings: () => set({
     atcOnlyMode: false,
     radarRange: 100,
-    radarBlackBackground: true,
+    radarBlackBackground: false,
     selectedAtcSectors: new Set(),
   }),
 }));

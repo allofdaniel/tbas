@@ -6,7 +6,7 @@
  * Clean Architecture 기반 메인 애플리케이션 컴포넌트
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import './index.css';
 
 // Context Providers
@@ -14,21 +14,23 @@ import { MapProvider, useMapContext } from '@/presentation/contexts/MapContext';
 import { AircraftProvider, useAircraftContext } from '@/presentation/contexts/AircraftContext';
 import { WeatherProvider, useWeatherContext } from '@/presentation/contexts/WeatherContext';
 
-// Map Components
+// Map Components (eagerly loaded - critical for initial render)
 import { MapContainer } from '@/presentation/components/map/MapContainer';
 import { AircraftLayer } from '@/presentation/components/map/AircraftLayer';
 import { TrailLayer } from '@/presentation/components/map/TrailLayer';
-import { WaypointLayer } from '@/presentation/components/map/WaypointLayer';
-import { AirspaceLayer } from '@/presentation/components/map/AirspaceLayer';
-import { ChartLayer } from '@/presentation/components/map/ChartLayer';
 import type { ChartData } from '@/presentation/components/map/ChartLayer';
 
-// Panel Components
-import { AircraftInfoPanel } from '@/presentation/components/Panels/AircraftInfoPanel';
-import { WeatherPanel } from '@/presentation/components/Panels/WeatherPanel';
-import { ControlPanel } from '@/presentation/components/Panels/ControlPanel';
-import { AircraftListPanel } from '@/presentation/components/Panels/AircraftListPanel';
-import { ChartPanel } from '@/presentation/components/Panels/ChartPanel';
+// Lazy-loaded Map Components (not immediately visible)
+const WaypointLayer = lazy(() => import('@/presentation/components/map/WaypointLayer').then(m => ({ default: m.WaypointLayer })));
+const AirspaceLayer = lazy(() => import('@/presentation/components/map/AirspaceLayer').then(m => ({ default: m.AirspaceLayer })));
+const ChartLayer = lazy(() => import('@/presentation/components/map/ChartLayer').then(m => ({ default: m.ChartLayer })));
+
+// Lazy-loaded Panel Components (shown on demand)
+const AircraftInfoPanel = lazy(() => import('@/presentation/components/Panels/AircraftInfoPanel').then(m => ({ default: m.AircraftInfoPanel })));
+const WeatherPanel = lazy(() => import('@/presentation/components/Panels/WeatherPanel').then(m => ({ default: m.WeatherPanel })));
+const ControlPanel = lazy(() => import('@/presentation/components/Panels/ControlPanel').then(m => ({ default: m.ControlPanel })));
+const AircraftListPanel = lazy(() => import('@/presentation/components/Panels/AircraftListPanel').then(m => ({ default: m.AircraftListPanel })));
+const ChartPanel = lazy(() => import('@/presentation/components/Panels/ChartPanel').then(m => ({ default: m.ChartPanel })));
 
 // Services
 import { getAirportCharts, getMockChartData } from '@/services/chartService';
@@ -244,17 +246,21 @@ function RKPUViewer() {
       {/* 지도 */}
       <MapContainer style={{ width: '100%', height: `${windowHeight}px` }}>
         {showCharts && (
-          <ChartLayer
-            airport={selectedChartAirport}
-            chartTypes={selectedChartTypes.length > 0 ? selectedChartTypes : undefined}
-            opacity={chartOpacity}
-            onChartLoad={setCharts}
-          />
+          <Suspense fallback={null}>
+            <ChartLayer
+              airport={selectedChartAirport}
+              chartTypes={selectedChartTypes.length > 0 ? selectedChartTypes : undefined}
+              opacity={chartOpacity}
+              onChartLoad={setCharts}
+            />
+          </Suspense>
         )}
         <AircraftLayer colorBy="flightPhase" showLabels />
         <TrailLayer color={TRAIL_COLOR} />
-        <WaypointLayer waypoints={waypoints} showLabels />
-        <AirspaceLayer airspaces={airspaces} fillOpacity={0.15} />
+        <Suspense fallback={null}>
+          <WaypointLayer waypoints={waypoints} showLabels />
+          <AirspaceLayer airspaces={airspaces} fillOpacity={0.15} />
+        </Suspense>
       </MapContainer>
 
       {/* 상단 도구 모음 */}
@@ -331,10 +337,12 @@ function RKPUViewer() {
             zIndex: 100,
           }}
         >
-          <ControlPanel
-            trailDuration={trailDuration}
-            onTrailDurationChange={setTrailDuration}
-          />
+          <Suspense fallback={<PanelLoadingFallback />}>
+            <ControlPanel
+              trailDuration={trailDuration}
+              onTrailDurationChange={setTrailDuration}
+            />
+          </Suspense>
         </div>
       )}
 
@@ -349,11 +357,13 @@ function RKPUViewer() {
             zIndex: 100,
           }}
         >
-          <AircraftListPanel
-            aircraft={aircraft}
-            selectedHex={selectedAircraftHex}
-            onSelect={handleAircraftSelect}
-          />
+          <Suspense fallback={<PanelLoadingFallback />}>
+            <AircraftListPanel
+              aircraft={aircraft}
+              selectedHex={selectedAircraftHex}
+              onSelect={handleAircraftSelect}
+            />
+          </Suspense>
         </div>
       )}
 
@@ -367,12 +377,14 @@ function RKPUViewer() {
             zIndex: 100,
           }}
         >
-          <WeatherPanel
-            metar={metar}
-            taf={taf}
-            weatherRisk={weatherRisk}
-            onRefresh={refreshWeather}
-          />
+          <Suspense fallback={<PanelLoadingFallback />}>
+            <WeatherPanel
+              metar={metar}
+              taf={taf}
+              weatherRisk={weatherRisk}
+              onRefresh={refreshWeather}
+            />
+          </Suspense>
         </div>
       )}
 
@@ -386,10 +398,12 @@ function RKPUViewer() {
             zIndex: 100,
           }}
         >
-          <AircraftInfoPanel
-            aircraft={selectedAircraft}
-            onClose={handleCloseAircraftInfo}
-          />
+          <Suspense fallback={<PanelLoadingFallback />}>
+            <AircraftInfoPanel
+              aircraft={selectedAircraft}
+              onClose={handleCloseAircraftInfo}
+            />
+          </Suspense>
         </div>
       )}
 
@@ -403,15 +417,17 @@ function RKPUViewer() {
             zIndex: 100,
           }}
         >
-          <ChartPanel
-            selectedAirport={selectedChartAirport}
-            onAirportChange={handleChartAirportChange}
-            selectedChartTypes={selectedChartTypes}
-            onChartTypesChange={setSelectedChartTypes}
-            chartOpacity={chartOpacity}
-            onOpacityChange={setChartOpacity}
-            charts={charts}
-          />
+          <Suspense fallback={<PanelLoadingFallback />}>
+            <ChartPanel
+              selectedAirport={selectedChartAirport}
+              onAirportChange={handleChartAirportChange}
+              selectedChartTypes={selectedChartTypes}
+              onChartTypesChange={setSelectedChartTypes}
+              chartOpacity={chartOpacity}
+              onOpacityChange={setChartOpacity}
+              charts={charts}
+            />
+          </Suspense>
         </div>
       )}
 
@@ -428,6 +444,38 @@ function RKPUViewer() {
       >
         TBAS Viewer | Keys: C (Settings), L (List), W (Weather), H (Charts), ESC (Deselect)
       </div>
+    </div>
+  );
+}
+
+/**
+ * 패널 로딩 폴백 컴포넌트
+ */
+function PanelLoadingFallback() {
+  return (
+    <div
+      style={{
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        borderRadius: '8px',
+        padding: '16px 24px',
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+      }}
+    >
+      <span
+        style={{
+          width: '12px',
+          height: '12px',
+          border: '2px solid rgba(255,255,255,0.3)',
+          borderTopColor: '#2196F3',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+        }}
+      />
+      Loading...
     </div>
   );
 }

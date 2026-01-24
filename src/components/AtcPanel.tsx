@@ -36,10 +36,6 @@ interface RadarViewControlsProps {
   setRadarRange: (range: number) => void;
   radarBlackBackground: boolean;
   setRadarBlackBackground: (bg: boolean) => void;
-  isDarkMode: boolean;
-  setIsDarkMode: (dark: boolean) => void;
-  showSatellite: boolean;
-  setShowSatellite: (show: boolean) => void;
   map: MutableRefObject<MapboxMap | null>;
 }
 
@@ -73,10 +69,6 @@ interface AtcPanelProps {
   setRadarRange: (range: number) => void;
   radarBlackBackground: boolean;
   setRadarBlackBackground: (bg: boolean) => void;
-  isDarkMode: boolean;
-  setIsDarkMode: (dark: boolean) => void;
-  showSatellite: boolean;
-  setShowSatellite: (show: boolean) => void;
   map: MutableRefObject<MapboxMap | null>;
 }
 
@@ -90,10 +82,6 @@ const RadarViewControls: React.FC<RadarViewControlsProps> = ({
   setRadarRange,
   radarBlackBackground,
   setRadarBlackBackground,
-  isDarkMode,
-  setIsDarkMode,
-  showSatellite,
-  setShowSatellite,
   map
 }) => (
   <div className="atc-dropdown-batch" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px', marginBottom: '8px' }}>
@@ -102,13 +90,9 @@ const RadarViewControls: React.FC<RadarViewControlsProps> = ({
       style={{ width: '100%', background: atcOnlyMode ? '#00FF00' : 'rgba(0,255,0,0.2)', color: atcOnlyMode ? '#000' : '#00FF00' }}
       onClick={() => {
         setAtcOnlyMode(!atcOnlyMode);
-        if (!atcOnlyMode) {
-          // 현재 상태와 다를 때만 setter 호출 (불필요한 리렌더링 방지)
-          if (!isDarkMode) setIsDarkMode(true);
-          if (showSatellite) setShowSatellite(false);
-          if (map?.current) {
-            map.current.flyTo({ center: [129.3517, 35.5935], zoom: 5, pitch: 0, bearing: 0, duration: 1000 });
-          }
+        // 레이더 뷰 활성화 시 지도 이동만 수행 (다른 설정은 변경하지 않음)
+        if (!atcOnlyMode && map?.current) {
+          map.current.flyTo({ center: [129.3517, 35.5935], zoom: 5, pitch: 0, bearing: 0, duration: 1000 });
         }
       }}
     >
@@ -248,10 +232,6 @@ const AtcPanel: React.FC<AtcPanelProps> = ({
   setRadarRange,
   radarBlackBackground,
   setRadarBlackBackground,
-  isDarkMode,
-  setIsDarkMode,
-  showSatellite,
-  setShowSatellite,
   map
 }) => {
   return (
@@ -279,10 +259,6 @@ const AtcPanel: React.FC<AtcPanelProps> = ({
             setRadarRange={setRadarRange}
             radarBlackBackground={radarBlackBackground}
             setRadarBlackBackground={setRadarBlackBackground}
-            isDarkMode={isDarkMode}
-            setIsDarkMode={setIsDarkMode}
-            showSatellite={showSatellite}
-            setShowSatellite={setShowSatellite}
             map={map}
           />
 
