@@ -89,10 +89,14 @@ const RadarViewControls: React.FC<RadarViewControlsProps> = ({
       className={`atc-mini-btn ${atcOnlyMode ? 'active' : ''}`}
       style={{ width: '100%', background: atcOnlyMode ? '#00FF00' : 'rgba(0,255,0,0.2)', color: atcOnlyMode ? '#000' : '#00FF00' }}
       onClick={() => {
-        setAtcOnlyMode(!atcOnlyMode);
-        // 레이더 뷰 활성화 시 지도 이동만 수행 (다른 설정은 변경하지 않음)
-        if (!atcOnlyMode && map?.current) {
-          map.current.flyTo({ center: [129.3517, 35.5935], zoom: 5, pitch: 0, bearing: 0, duration: 1000 });
+        const newMode = !atcOnlyMode;
+        setAtcOnlyMode(newMode);
+        // 레이더 뷰 활성화 시 검은배경 체크 해제 + 지도 이동
+        if (newMode) {
+          setRadarBlackBackground(false);
+          if (map?.current) {
+            map.current.flyTo({ center: [129.3517, 35.5935], zoom: 5, pitch: 0, bearing: 0, duration: 1000 });
+          }
         }
       }}
     >
