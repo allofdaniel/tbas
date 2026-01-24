@@ -325,14 +325,7 @@ function App() {
 
   const handleAtcModeToggle = (enabled) => {
     setAtcOnlyMode(enabled);
-    if (enabled) {
-      // 현재 상태와 다를 때만 setter 호출 (불필요한 리렌더링 방지)
-      if (!isDarkMode) setIsDarkMode(true);
-      if (showSatellite) setShowSatellite(false);
-      if (map?.current) {
-        map.current.flyTo({ center: [129.3517, 35.5935], zoom: 5, pitch: 0, bearing: 0, duration: 1000 });
-      }
-    }
+    // 카메라 이동 없이 레이더 모드만 토글
   };
 
   const chartsByRunway = {
