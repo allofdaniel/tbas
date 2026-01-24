@@ -1,6 +1,4 @@
 import { create } from 'zustand';
-import type { MutableRefObject } from 'react';
-import type { Map as MapboxMap } from 'mapbox-gl';
 
 /**
  * AtcStore - ATC/레이더 관련 상태 관리
@@ -35,7 +33,7 @@ interface AtcActions {
   clearAllSectors: () => void;
 
   // Radar mode helpers
-  enableRadarMode: (mapRef: MutableRefObject<MapboxMap | null>) => void;
+  enableRadarMode: () => void;
   resetRadarSettings: () => void;
 }
 
@@ -85,21 +83,11 @@ const useAtcStore = create<AtcStore>((set) => ({
   }),
   clearAllSectors: () => set({ selectedAtcSectors: new Set() }),
 
-  // Enable radar mode (설정 자동 변경 없음)
-  enableRadarMode: (mapRef) => {
+  // Enable radar mode (카메라 이동 없음)
+  enableRadarMode: () => {
     set({
       atcOnlyMode: true,
-      // radarBlackBackground는 사용자가 직접 토글
     });
-    if (mapRef?.current) {
-      mapRef.current.flyTo({
-        center: [129.3517, 35.5935],
-        zoom: 5,
-        pitch: 0,
-        bearing: 0,
-        duration: 1000
-      });
-    }
   },
 
   // Reset radar settings

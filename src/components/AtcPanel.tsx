@@ -91,12 +91,9 @@ const RadarViewControls: React.FC<RadarViewControlsProps> = ({
       onClick={() => {
         const newMode = !atcOnlyMode;
         setAtcOnlyMode(newMode);
-        // 레이더 뷰 활성화 시 검은배경 체크 해제 + 지도 이동
+        // 레이더 뷰 활성화 시 검은배경 체크 해제 (카메라 이동 없음)
         if (newMode) {
           setRadarBlackBackground(false);
-          if (map?.current) {
-            map.current.flyTo({ center: [129.3517, 35.5935], zoom: 5, pitch: 0, bearing: 0, duration: 1000 });
-          }
         }
       }}
     >
