@@ -146,9 +146,22 @@ const useMapStyle = ({
     // radarBlackBackground가 true면 검은 오버레이 표시
     if (radarBlackBackground) {
       if (!map.current.getLayer(blackOverlayId)) {
-        // 맨 아래에 검은 오버레이 추가 (항적/항공기 레이어보다 아래)
-        const layers = map.current.getStyle()?.layers;
-        const firstLayerId = layers && layers.length > 0 ? layers[0].id : undefined;
+        // 커스텀 레이어들 (항적, 항공기 등) 바로 아래에 검은 오버레이 추가
+        // 이렇게 하면 Mapbox 기본 레이어 위, 커스텀 레이어 아래에 위치
+        const customLayerIds = [
+          'aircraft-3d', 'aircraft-2d', 'aircraft-labels',
+          'aircraft-trails-3d', 'aircraft-trails-2d', 'trail-layer',
+          'waypoint-layer', 'airspace-layer', 'atc-sectors-fill'
+        ];
+
+        // 존재하는 첫 번째 커스텀 레이어 찾기
+        let beforeLayerId: string | undefined;
+        for (const layerId of customLayerIds) {
+          if (map.current.getLayer(layerId)) {
+            beforeLayerId = layerId;
+            break;
+          }
+        }
 
         map.current.addLayer({
           id: blackOverlayId,
@@ -157,7 +170,7 @@ const useMapStyle = ({
             'background-color': '#000000',
             'background-opacity': 0.95
           }
-        }, firstLayerId); // firstLayerId 앞에 추가 = 맨 아래
+        }, beforeLayerId); // 커스텀 레이어 앞에 추가 = Mapbox 레이어 위, 커스텀 레이어 아래
       }
     } else {
       // 오버레이 제거
