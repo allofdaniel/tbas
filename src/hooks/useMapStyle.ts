@@ -146,15 +146,18 @@ const useMapStyle = ({
     // radarBlackBackground가 true면 검은 오버레이 표시
     if (radarBlackBackground) {
       if (!map.current.getLayer(blackOverlayId)) {
-        // 맨 위에 반투명 검은 오버레이 추가 (기존 레이어 숨기지 않음)
+        // 맨 아래에 검은 오버레이 추가 (항적/항공기 레이어보다 아래)
+        const layers = map.current.getStyle()?.layers;
+        const firstLayerId = layers && layers.length > 0 ? layers[0].id : undefined;
+
         map.current.addLayer({
           id: blackOverlayId,
           type: 'background',
           paint: {
             'background-color': '#000000',
-            'background-opacity': 0.85  // 약간 투명하게
+            'background-opacity': 0.95
           }
-        });
+        }, firstLayerId); // firstLayerId 앞에 추가 = 맨 아래
       }
     } else {
       // 오버레이 제거
