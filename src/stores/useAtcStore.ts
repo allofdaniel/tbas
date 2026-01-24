@@ -83,7 +83,7 @@ const useAtcStore = create<AtcStore>((set) => ({
   }),
   clearAllSectors: () => set({ selectedAtcSectors: new Set() }),
 
-  // Enable radar mode (카메라 이동 없음)
+  // Enable radar mode - 카메라 이동 없음, 검은배경 설정 안함
   enableRadarMode: () => {
     set({
       atcOnlyMode: true,
