@@ -1,6 +1,6 @@
 {
   "name": "tbas",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "TBAS (Trajectory-Based Awareness System) - 궤적기반 상황인식 시스템",
   "type": "module",
   "scripts": {
