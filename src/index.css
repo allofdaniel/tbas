@@ -5322,3 +5322,73 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* Korea Procedures Section */
+.korea-procedures-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.korea-procedures-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.korea-procedures-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #88d0ff;
+}
+
+.korea-procedures-total {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.korea-airport-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.korea-airport-selector label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.korea-airport-select {
+  flex: 1;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+}
+
+.korea-airport-select:hover {
+  border-color: rgba(100, 181, 246, 0.5);
+}
+
+.korea-airport-select:focus {
+  outline: none;
+  border-color: #64b5f6;
+}
+
+.korea-airport-select option {
+  background: #1e232d;
+  color: #fff;
+}
+
+.korea-procedure-toggles {
+  margin-top: 4px;
+  padding-left: 4px;
+}

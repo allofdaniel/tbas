@@ -22,13 +22,20 @@ export default function useMapInit(
   useEffect(() => {
     if (map.current || !mapContainerRef.current) return;
 
+    // Korea and surrounding airspace bounds
+    // SW: [118, 30] to NE: [142, 46] covers Korea, Japan, parts of China
+    const KOREA_BOUNDS: mapboxgl.LngLatBoundsLike = [[118, 30], [142, 46]];
+
     map.current = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: MAP_STYLES.dark as string,
-      center: [129.3518, 35.5934],
-      zoom: 11,
-      pitch: 60,
-      bearing: -30,
+      center: [127.5, 36.5], // Korea center
+      zoom: 6, // Show all of Korea
+      pitch: 0,
+      bearing: 0,
+      maxBounds: KOREA_BOUNDS,
+      minZoom: 4,
+      maxZoom: 18,
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'bottom-right');

@@ -102,8 +102,12 @@ const clampMEA = (mea?: number): number => {
   return mea;
 };
 
-/** 좌표 포맷 (DMS) */
-const formatCoord = (lat: number, lon: number): string => {
+/** 좌표 포맷 (DMS) - GeoJSON properties는 문자열로 변환되므로 parseFloat 필요 */
+const formatCoord = (lat: number | string, lon: number | string): string => {
+  const latNum = typeof lat === 'string' ? parseFloat(lat) : lat;
+  const lonNum = typeof lon === 'string' ? parseFloat(lon) : lon;
+  if (isNaN(latNum) || isNaN(lonNum)) return 'N/A';
+
   const fmtDMS = (deg: number, pos: string, neg: string): string => {
     const sign = deg >= 0 ? pos : neg;
     const abs = Math.abs(deg);
@@ -112,7 +116,79 @@ const formatCoord = (lat: number, lon: number): string => {
     const s = ((abs - d - m / 60) * 3600).toFixed(1);
     return `${d}°${String(m).padStart(2, '0')}'${String(s).padStart(4, '0')}"${sign}`;
   };
-  return `${fmtDMS(lat, 'N', 'S')} ${fmtDMS(lon, 'E', 'W')}`;
+  return `${fmtDMS(latNum, 'N', 'S')} ${fmtDMS(lonNum, 'E', 'W')}`;
+};
+
+/**
+ * 홀딩 패턴 레이스트랙 폴리곤 생성
+ * @param lat 홀딩 픽스 위도
+ * @param lon 홀딩 픽스 경도
+ * @param inboundCourse 인바운드 코스 (도)
+ * @param turnDirection 선회 방향 ('L' | 'R')
+ * @param legLengthNm 레그 길이 (NM) - 기본 4NM
+ */
+const createHoldingPattern = (
+  lat: number,
+  lon: number,
+  inboundCourse: number,
+  turnDirection: string = 'R',
+  legLengthNm: number = 4
+): [number, number][] => {
+  const points: [number, number][] = [];
+  const NM_TO_DEG = 1 / 60; // 1 해리 ≈ 1/60도
+  const legLength = legLengthNm * NM_TO_DEG;
+  const turnRadius = 1.5 * NM_TO_DEG; // 1.5 NM 선회 반경
+
+  // 인바운드 코스를 라디안으로 변환 (진북 기준)
+  const inboundRad = (90 - inboundCourse) * Math.PI / 180;
+  const outboundRad = inboundRad + Math.PI;
+
+  // 선회 방향에 따른 오프셋 (우선회는 +, 좌선회는 -)
+  const turnSign = turnDirection === 'L' ? -1 : 1;
+  const perpOffset = turnRadius * turnSign;
+
+  // 코스에 수직인 방향
+  const perpRad = inboundRad + Math.PI / 2;
+
+  // 홀딩 픽스 (fix point)
+  const fixLon = lon;
+  const fixLat = lat;
+
+  // 아웃바운드 끝점
+  const outEndLon = fixLon + Math.cos(outboundRad) * legLength;
+  const outEndLat = fixLat + Math.sin(outboundRad) * legLength / Math.cos(lat * Math.PI / 180);
+
+  // 레이스트랙 모양의 폴리곤 생성 (반원 + 직선 + 반원 + 직선)
+  const segments = 12; // 반원 세그먼트 수
+
+  // 인바운드 턴 (홀딩 픽스에서 시작하는 반원)
+  const turnCenter1Lon = fixLon + Math.cos(perpRad) * perpOffset;
+  const turnCenter1Lat = fixLat + Math.sin(perpRad) * perpOffset / Math.cos(lat * Math.PI / 180);
+
+  for (let i = 0; i <= segments; i++) {
+    const angle = inboundRad - turnSign * Math.PI * i / segments;
+    const pLon = turnCenter1Lon + Math.cos(angle) * turnRadius;
+    const pLat = turnCenter1Lat + Math.sin(angle) * turnRadius / Math.cos(lat * Math.PI / 180);
+    points.push([pLon, pLat]);
+  }
+
+  // 아웃바운드 턴 (아웃바운드 끝에서의 반원)
+  const turnCenter2Lon = outEndLon + Math.cos(perpRad) * perpOffset;
+  const turnCenter2Lat = outEndLat + Math.sin(perpRad) * perpOffset / Math.cos(lat * Math.PI / 180);
+
+  for (let i = 0; i <= segments; i++) {
+    const angle = outboundRad - turnSign * Math.PI * i / segments;
+    const pLon = turnCenter2Lon + Math.cos(angle) * turnRadius;
+    const pLat = turnCenter2Lat + Math.sin(angle) * turnRadius / Math.cos(lat * Math.PI / 180);
+    points.push([pLon, pLat]);
+  }
+
+  // 폴리곤 닫기
+  if (points.length > 0 && points[0]) {
+    points.push(points[0]);
+  }
+
+  return points;
 };
 
 /** 공통 팝업 스타일 */
@@ -185,9 +261,10 @@ const useKoreaAirspace = (
     ['korea-routes', 'korea-routes-3d', 'korea-routes-labels', 'korea-waypoints', 'korea-waypoint-labels', 'korea-navaids', 'korea-navaid-labels',
      'korea-airspaces-fill', 'korea-airspaces-3d', 'korea-airspaces-outline', 'korea-airspaces-labels',
      'korea-airports', 'korea-airport-labels', 'korea-runways', 'korea-ils',
-     'korea-holdings', 'korea-holding-labels', 'korea-terminal-waypoints', 'korea-terminal-waypoint-labels'].forEach(safeRemoveLayer);
+     'korea-holdings', 'korea-holdings-outline', 'korea-holdings-fix', 'korea-holding-labels', 
+     'korea-terminal-waypoints', 'korea-terminal-waypoint-labels'].forEach(safeRemoveLayer);
     ['korea-routes', 'korea-routes-3d', 'korea-waypoints', 'korea-waypoint-labels-src', 'korea-navaids', 'korea-airspaces',
-     'korea-airports', 'korea-runways', 'korea-ils', 'korea-holdings', 'korea-terminal-waypoints'].forEach(safeRemoveSource);
+     'korea-airports', 'korea-runways', 'korea-ils', 'korea-holdings', 'korea-holdings-labels', 'korea-terminal-waypoints'].forEach(safeRemoveSource);
 
     const routes = koreaAirspaceData.routes as Route[] | undefined;
     const waypoints = koreaAirspaceData.waypoints as Waypoint[] | undefined;
@@ -566,6 +643,7 @@ const useKoreaAirspace = (
 
     // ========== Airports layer ==========
     if (showKoreaAirports && koreaAirspaceData.airports && koreaAirspaceData.airports.length > 0) {
+      try {
       const aptData = koreaAirspaceData.airports as KoreaAirport[];
 
       // Airport marker points
@@ -586,9 +664,9 @@ const useKoreaAirspace = (
           type: apt.type,
           ifr: apt.ifr,
           label: `${apt.icao}${apt.iata ? '/' + apt.iata : ''}\n${apt.elevation_ft}ft`,
-          runways: apt.runways.length,
-          ils_count: apt.ils.length,
-          comms_count: apt.comms.length,
+          runways: apt.runways?.length || 0,
+          ils_count: apt.ils?.length || 0,
+          comms_count: apt.comms?.length || 0,
           gates_count: apt.gates?.length || 0,
           freq_count: apt.frequencies?.length || 0,
           transition_alt: apt.transition_alt,
@@ -599,14 +677,17 @@ const useKoreaAirspace = (
         }
       }));
 
-      map.current?.addSource('korea-airports', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: aptFeatures }
-      });
-      map.current?.addLayer({
-        id: 'korea-airports',
-        type: 'circle',
-        source: 'korea-airports',
+      if (!map.current?.getSource('korea-airports')) {
+        map.current?.addSource('korea-airports', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: aptFeatures }
+        });
+      }
+      if (!map.current?.getLayer('korea-airports')) {
+        map.current?.addLayer({
+          id: 'korea-airports',
+          type: 'circle',
+          source: 'korea-airports',
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 8, 8, 12, 14],
           'circle-color': [
@@ -618,13 +699,15 @@ const useKoreaAirspace = (
           ],
           'circle-stroke-width': 2,
           'circle-stroke-color': '#ffffff',
-          'circle-opacity': 0.9,
-        }
-      });
-      map.current?.addLayer({
-        id: 'korea-airport-labels',
-        type: 'symbol',
-        source: 'korea-airports',
+            'circle-opacity': 0.9,
+          }
+        });
+      }
+      if (!map.current?.getLayer('korea-airport-labels')) {
+        map.current?.addLayer({
+          id: 'korea-airport-labels',
+          type: 'symbol',
+          source: 'korea-airports',
         minzoom: 5,
         layout: {
           'text-field': ['get', 'label'],
@@ -643,9 +726,10 @@ const useKoreaAirspace = (
             '#4FC3F7'
           ],
           'text-halo-color': 'rgba(0,0,0,0.9)',
-          'text-halo-width': 1.5,
-        }
-      });
+            'text-halo-width': 1.5,
+          }
+        });
+      }
 
       // Runway lines
       interface RwyFeature {
@@ -655,10 +739,12 @@ const useKoreaAirspace = (
       }
       const rwyFeatures: RwyFeature[] = [];
       aptData.forEach(apt => {
-        apt.runways.forEach(rwy => {
-          if (!rwy.lat || !rwy.lon || !rwy.heading_true) return;
+        (apt.runways || []).forEach(rwy => {
+          // Check for valid coordinates and heading (allow 0 for north-facing runways)
+          if (typeof rwy.lat !== 'number' || typeof rwy.lon !== 'number') return;
+          if (rwy.heading_true == null || rwy.length_m == null || rwy.length_m <= 0) return;
           const hdg = (rwy.heading_true * Math.PI) / 180;
-          const lenDeg = (rwy.length_m / 111320) * 0.5;
+          const lenDeg = ((rwy.length_m || 3000) / 111320) * 0.5;
           rwyFeatures.push({
             type: 'Feature',
             geometry: {
@@ -684,21 +770,25 @@ const useKoreaAirspace = (
       });
 
       if (rwyFeatures.length > 0) {
-        map.current?.addSource('korea-runways', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: rwyFeatures }
-        });
-        map.current?.addLayer({
-          id: 'korea-runways',
-          type: 'line',
-          source: 'korea-runways',
-          minzoom: 8,
-          paint: {
-            'line-color': '#FFFFFF',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 12, 4, 16, 10],
-            'line-opacity': 0.9,
-          }
-        });
+        if (!map.current?.getSource('korea-runways')) {
+          map.current?.addSource('korea-runways', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: rwyFeatures }
+          });
+        }
+        if (!map.current?.getLayer('korea-runways')) {
+          map.current?.addLayer({
+            id: 'korea-runways',
+            type: 'line',
+            source: 'korea-runways',
+            minzoom: 8,
+            paint: {
+              'line-color': '#FFFFFF',
+              'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 12, 4, 16, 10],
+              'line-opacity': 0.9,
+            }
+          });
+        }
       }
 
       // ILS localizer lines
@@ -709,8 +799,10 @@ const useKoreaAirspace = (
       }
       const ilsFeatures: IlsFeature[] = [];
       aptData.forEach(apt => {
-        apt.ils.forEach(ils => {
-          if (!ils.llz_lat || !ils.llz_lon || !ils.course) return;
+        (apt.ils || []).forEach(ils => {
+          // Check for valid coordinates and course (allow 0 for north-facing ILS)
+          if (typeof ils.llz_lat !== 'number' || typeof ils.llz_lon !== 'number') return;
+          if (ils.course == null) return;
           const crs = (ils.course * Math.PI) / 180;
           const extLen = 0.08; // ~9km approach line
           ilsFeatures.push({
@@ -736,22 +828,29 @@ const useKoreaAirspace = (
       });
 
       if (ilsFeatures.length > 0) {
-        map.current?.addSource('korea-ils', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: ilsFeatures }
-        });
-        map.current?.addLayer({
-          id: 'korea-ils',
-          type: 'line',
-          source: 'korea-ils',
-          minzoom: 9,
-          paint: {
-            'line-color': '#00E676',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 3],
-            'line-opacity': 0.7,
-            'line-dasharray': [4, 2],
-          }
-        });
+        if (!map.current?.getSource('korea-ils')) {
+          map.current?.addSource('korea-ils', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: ilsFeatures }
+          });
+        }
+        if (!map.current?.getLayer('korea-ils')) {
+          map.current?.addLayer({
+            id: 'korea-ils',
+            type: 'line',
+            source: 'korea-ils',
+            minzoom: 9,
+            paint: {
+              'line-color': '#00E676',
+              'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 3],
+              'line-opacity': 0.7,
+              'line-dasharray': [4, 2],
+            }
+          });
+        }
+      }
+      } catch (err) {
+        console.error('[KoreaAirspace] Airport layer error:', err);
       }
     }
 
@@ -866,10 +965,42 @@ const useKoreaAirspace = (
       });
     }
 
-    // ========== Holdings layer ==========
+    // ========== Holdings layer (Racetrack Pattern) ==========
     const holdings = koreaAirspaceData.holdings;
     if (showKoreaHoldings && holdings && holdings.length > 0) {
-      const holdingFeatures = holdings
+      // 레이스트랙 폴리곤 피쳐와 라벨용 포인트 피쳘 생성
+      const holdingPolygonFeatures = holdings
+        .filter(h => h.lat && h.lon && h.inbound_course !== undefined)
+        .map(h => {
+          const legNm = h.leg_length || (h.leg_time ? h.leg_time * 3 : 4); // 1분 ≈ 3NM (180kt 기준)
+          const pattern = createHoldingPattern(
+            h.lat,
+            h.lon,
+            h.inbound_course,
+            h.turn || 'R',
+            legNm
+          );
+          return {
+            type: 'Feature' as const,
+            geometry: { type: 'Polygon' as const, coordinates: [pattern] },
+            properties: {
+              waypoint: h.waypoint,
+              name: h.name || h.waypoint,
+              inbound_course: h.inbound_course,
+              turn: h.turn || 'R',
+              leg_time: h.leg_time,
+              leg_length: h.leg_length,
+              speed: h.speed,
+              min_alt: h.min_alt,
+              max_alt: h.max_alt,
+              lat: h.lat,
+              lon: h.lon
+            }
+          };
+        });
+
+      // 라벨용 포인트 피쳘 (홀딩 픽스 위치)
+      const holdingLabelFeatures = holdings
         .filter(h => h.lat && h.lon)
         .map(h => ({
           type: 'Feature' as const,
@@ -891,27 +1022,57 @@ const useKoreaAirspace = (
 
       map.current?.addSource('korea-holdings', {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: holdingFeatures }
+        data: { type: 'FeatureCollection', features: holdingPolygonFeatures }
       });
 
+      map.current?.addSource('korea-holdings-labels', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: holdingLabelFeatures }
+      });
+
+      // 레이스트랙 패턴 폴리곤 (fill)
       map.current?.addLayer({
         id: 'korea-holdings',
-        type: 'circle',
+        type: 'fill',
         source: 'korea-holdings',
         minzoom: 6,
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 4, 10, 7, 14, 10],
+          'fill-color': '#FF69B4',
+          'fill-opacity': 0.15
+        }
+      });
+
+      // 레이스트랙 패턴 외곽선
+      map.current?.addLayer({
+        id: 'korea-holdings-outline',
+        type: 'line',
+        source: 'korea-holdings',
+        minzoom: 6,
+        paint: {
+          'line-color': '#FF69B4',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1, 10, 2, 14, 3],
+          'line-opacity': 0.9
+        }
+      });
+
+      // 홀딩 픽스 마커 (작은 원)
+      map.current?.addLayer({
+        id: 'korea-holdings-fix',
+        type: 'circle',
+        source: 'korea-holdings-labels',
+        minzoom: 7,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 3, 12, 5],
           'circle-color': '#FF69B4',
           'circle-stroke-color': '#FFFFFF',
-          'circle-stroke-width': 1.5,
-          'circle-opacity': 0.85
+          'circle-stroke-width': 1.5
         }
       });
 
       map.current?.addLayer({
         id: 'korea-holding-labels',
         type: 'symbol',
-        source: 'korea-holdings',
+        source: 'korea-holdings-labels',
         minzoom: 8,
         layout: {
           'text-field': ['get', 'waypoint'],
@@ -1170,9 +1331,15 @@ const useKoreaAirspace = (
       `);
     };
     addHandler('korea-holdings', 'click', onHoldingClick);
+    addHandler('korea-holdings-outline', 'click', onHoldingClick);
+    addHandler('korea-holdings-fix', 'click', onHoldingClick);
     addHandler('korea-holding-labels', 'click', onHoldingClick);
     addHandler('korea-holdings', 'mouseenter', setCursor);
     addHandler('korea-holdings', 'mouseleave', resetCursor);
+    addHandler('korea-holdings-outline', 'mouseenter', setCursor);
+    addHandler('korea-holdings-outline', 'mouseleave', resetCursor);
+    addHandler('korea-holdings-fix', 'mouseenter', setCursor);
+    addHandler('korea-holdings-fix', 'mouseleave', resetCursor);
 
     // --- Terminal Waypoint click ---
     const onTermWptClick = (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }) => {

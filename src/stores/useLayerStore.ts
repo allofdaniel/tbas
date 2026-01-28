@@ -26,6 +26,12 @@ interface LayerState {
   showKoreaHoldings: boolean;
   showKoreaTerminalWaypoints: boolean;
 
+  // Korea procedures
+  showKoreaSids: boolean;
+  showKoreaStars: boolean;
+  showKoreaIaps: boolean;
+  selectedKoreaAirport: string;
+
   // Global data layers
   showGlobalAirports: boolean;
   showGlobalNavaids: boolean;
@@ -56,6 +62,12 @@ interface LayerActions {
   setShowKoreaAirports: (value: boolean) => void;
   setShowKoreaHoldings: (value: boolean) => void;
   setShowKoreaTerminalWaypoints: (value: boolean) => void;
+
+  // Korea procedures
+  setShowKoreaSids: (value: boolean) => void;
+  setShowKoreaStars: (value: boolean) => void;
+  setShowKoreaIaps: (value: boolean) => void;
+  setSelectedKoreaAirport: (value: string) => void;
 
   // Global data layers
   setShowGlobalAirports: (value: boolean) => void;
@@ -100,6 +112,12 @@ const useLayerStore = create<LayerStore>((set) => ({
   showKoreaHoldings: false,
   showKoreaTerminalWaypoints: false,
 
+  // Korea procedures
+  showKoreaSids: false,
+  showKoreaStars: false,
+  showKoreaIaps: false,
+  selectedKoreaAirport: '',
+
   // Global data layers
   showGlobalAirports: false,
   showGlobalNavaids: false,
@@ -128,6 +146,12 @@ const useLayerStore = create<LayerStore>((set) => ({
   setShowKoreaAirports: (value) => set({ showKoreaAirports: value }),
   setShowKoreaHoldings: (value) => set({ showKoreaHoldings: value }),
   setShowKoreaTerminalWaypoints: (value) => set({ showKoreaTerminalWaypoints: value }),
+
+  // Actions - Korea procedures
+  setShowKoreaSids: (value) => set({ showKoreaSids: value }),
+  setShowKoreaStars: (value) => set({ showKoreaStars: value }),
+  setShowKoreaIaps: (value) => set({ showKoreaIaps: value }),
+  setSelectedKoreaAirport: (value) => set({ selectedKoreaAirport: value }),
 
   // Actions - Global data layers
   setShowGlobalAirports: (value) => set({ showGlobalAirports: value }),
@@ -161,6 +185,10 @@ const useLayerStore = create<LayerStore>((set) => ({
     showKoreaAirports: false,
     showKoreaHoldings: false,
     showKoreaTerminalWaypoints: false,
+    showKoreaSids: false,
+    showKoreaStars: false,
+    showKoreaIaps: false,
+    selectedKoreaAirport: '',
     showGlobalAirports: false,
     showGlobalNavaids: false,
     showGlobalHeliports: false,

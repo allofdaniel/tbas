@@ -155,6 +155,10 @@ function App() {
     showKoreaAirports, setShowKoreaAirports,
     showKoreaHoldings, setShowKoreaHoldings,
     showKoreaTerminalWaypoints, setShowKoreaTerminalWaypoints,
+    showKoreaSids, setShowKoreaSids,
+    showKoreaStars, setShowKoreaStars,
+    showKoreaIaps, setShowKoreaIaps,
+    selectedKoreaAirport, setSelectedKoreaAirport,
     showGlobalAirports, setShowGlobalAirports,
     showGlobalNavaids, setShowGlobalNavaids,
     showGlobalHeliports, setShowGlobalHeliports,
@@ -573,9 +577,17 @@ function App() {
             setShowKoreaHoldings={setShowKoreaHoldings}
             showKoreaTerminalWaypoints={showKoreaTerminalWaypoints}
             setShowKoreaTerminalWaypoints={setShowKoreaTerminalWaypoints}
+            showKoreaSids={showKoreaSids}
+            setShowKoreaSids={setShowKoreaSids}
+            showKoreaStars={showKoreaStars}
+            setShowKoreaStars={setShowKoreaStars}
+            showKoreaIaps={showKoreaIaps}
+            setShowKoreaIaps={setShowKoreaIaps}
+            selectedKoreaAirport={selectedKoreaAirport}
+            setSelectedKoreaAirport={setSelectedKoreaAirport}
           />
 
-          {/* Global Data Panel */}
+          {/* Global Data Panel - Disabled for Korea-only view
           <GlobalDataPanel
             globalExpanded={globalExpanded}
             setGlobalExpanded={setGlobalExpanded}
@@ -600,6 +612,7 @@ function App() {
             showGlobalFirUir={showGlobalFirUir}
             setShowGlobalFirUir={setShowGlobalFirUir}
           />
+          */}
 
           {/* Aircraft Control Panel */}
           <AircraftControlPanel
