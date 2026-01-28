@@ -644,7 +644,14 @@ const useKoreaAirspace = (
     // ========== Airports layer ==========
     if (showKoreaAirports && koreaAirspaceData.airports && koreaAirspaceData.airports.length > 0) {
       try {
-      const aptData = koreaAirspaceData.airports as KoreaAirport[];
+      // Filter valid airports first
+      const aptData = (koreaAirspaceData.airports as KoreaAirport[]).filter(apt =>
+        apt != null && typeof apt.lat === 'number' && typeof apt.lon === 'number' && apt.icao
+      );
+
+      if (aptData.length === 0) {
+        console.warn('[KoreaAirspace] No valid airports found');
+      }
 
       // Airport marker points
       interface AptFeature {
@@ -656,22 +663,22 @@ const useKoreaAirspace = (
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [apt.lon, apt.lat] },
         properties: {
-          icao: apt.icao,
+          icao: apt.icao || '',
           iata: apt.iata || '',
-          name: apt.name,
+          name: apt.name || '',
           city: apt.city || '',
-          elevation_ft: apt.elevation_ft,
-          type: apt.type,
-          ifr: apt.ifr,
-          label: `${apt.icao}${apt.iata ? '/' + apt.iata : ''}\n${apt.elevation_ft}ft`,
-          runways: apt.runways?.length || 0,
-          ils_count: apt.ils?.length || 0,
-          comms_count: apt.comms?.length || 0,
-          gates_count: apt.gates?.length || 0,
-          freq_count: apt.frequencies?.length || 0,
-          transition_alt: apt.transition_alt,
-          transition_level: apt.transition_level,
-          mag_var: apt.mag_var,
+          elevation_ft: apt.elevation_ft ?? 0,
+          type: apt.type || 'civil',
+          ifr: apt.ifr ?? false,
+          label: `${apt.icao || ''}${apt.iata ? '/' + apt.iata : ''}\n${apt.elevation_ft ?? 0}ft`,
+          runways: Array.isArray(apt.runways) ? apt.runways.length : 0,
+          ils_count: Array.isArray(apt.ils) ? apt.ils.length : 0,
+          comms_count: Array.isArray(apt.comms) ? apt.comms.length : 0,
+          gates_count: Array.isArray(apt.gates) ? apt.gates.length : 0,
+          freq_count: Array.isArray(apt.frequencies) ? apt.frequencies.length : 0,
+          transition_alt: apt.transition_alt ?? null,
+          transition_level: apt.transition_level ?? null,
+          mag_var: apt.mag_var ?? null,
           lat: apt.lat,
           lon: apt.lon,
         }
@@ -739,7 +746,9 @@ const useKoreaAirspace = (
       }
       const rwyFeatures: RwyFeature[] = [];
       aptData.forEach(apt => {
-        (apt.runways || []).forEach(rwy => {
+        if (!apt || !Array.isArray(apt.runways)) return;
+        apt.runways.forEach(rwy => {
+          if (!rwy) return;
           // Check for valid coordinates and heading (allow 0 for north-facing runways)
           if (typeof rwy.lat !== 'number' || typeof rwy.lon !== 'number') return;
           if (rwy.heading_true == null || rwy.length_m == null || rwy.length_m <= 0) return;
@@ -799,7 +808,9 @@ const useKoreaAirspace = (
       }
       const ilsFeatures: IlsFeature[] = [];
       aptData.forEach(apt => {
-        (apt.ils || []).forEach(ils => {
+        if (!apt || !Array.isArray(apt.ils)) return;
+        apt.ils.forEach(ils => {
+          if (!ils) return;
           // Check for valid coordinates and course (allow 0 for north-facing ILS)
           if (typeof ils.llz_lat !== 'number' || typeof ils.llz_lon !== 'number') return;
           if (ils.course == null) return;
