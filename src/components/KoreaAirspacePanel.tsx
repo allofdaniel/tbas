@@ -19,6 +19,12 @@ interface KoreaAirspacePanelProps {
   setShowKoreaNavaids: (show: boolean) => void;
   showKoreaAirspaces: boolean;
   setShowKoreaAirspaces: (show: boolean) => void;
+  showKoreaAirports: boolean;
+  setShowKoreaAirports: (show: boolean) => void;
+  showKoreaHoldings: boolean;
+  setShowKoreaHoldings: (show: boolean) => void;
+  showKoreaTerminalWaypoints: boolean;
+  setShowKoreaTerminalWaypoints: (show: boolean) => void;
 }
 
 /**
@@ -35,7 +41,13 @@ const KoreaAirspacePanel: React.FC<KoreaAirspacePanelProps> = React.memo(({
   showKoreaNavaids,
   setShowKoreaNavaids,
   showKoreaAirspaces,
-  setShowKoreaAirspaces
+  setShowKoreaAirspaces,
+  showKoreaAirports,
+  setShowKoreaAirports,
+  showKoreaHoldings,
+  setShowKoreaHoldings,
+  showKoreaTerminalWaypoints,
+  setShowKoreaTerminalWaypoints,
 }) => {
   if (!koreaAirspaceData) return null;
 
@@ -44,8 +56,14 @@ const KoreaAirspacePanel: React.FC<KoreaAirspacePanelProps> = React.memo(({
       title="국내 항로/공역"
       expanded={koreaRoutesExpanded}
       onToggle={() => setKoreaRoutesExpanded(!koreaRoutesExpanded)}
-      badge={`${(koreaAirspaceData.routes?.length || 0) + (koreaAirspaceData.airspaces?.length || 0)}개`}
+      badge={`${(koreaAirspaceData.airports?.length || 0) + (koreaAirspaceData.routes?.length || 0) + (koreaAirspaceData.airspaces?.length || 0) + (koreaAirspaceData.holdings?.length || 0)}개`}
     >
+      <ToggleItem
+        label="공항/활주로/ILS"
+        checked={showKoreaAirports}
+        onChange={setShowKoreaAirports}
+        count={koreaAirspaceData.airports?.length || 0}
+      />
       <ToggleItem
         label="항로 (ATS/RNAV)"
         checked={showKoreaRoutes}
@@ -70,8 +88,20 @@ const KoreaAirspacePanel: React.FC<KoreaAirspacePanelProps> = React.memo(({
         onChange={setShowKoreaAirspaces}
         count={koreaAirspaceData.airspaces?.length || 0}
       />
+      <ToggleItem
+        label="홀딩 패턴"
+        checked={showKoreaHoldings}
+        onChange={setShowKoreaHoldings}
+        count={koreaAirspaceData.holdings?.length || 0}
+      />
+      <ToggleItem
+        label="터미널 웨이포인트"
+        checked={showKoreaTerminalWaypoints}
+        onChange={setShowKoreaTerminalWaypoints}
+        count={koreaAirspaceData.terminalWaypoints?.length || 0}
+      />
       <div className="korea-airspace-info">
-        <small>출처: eAIP Korea (AIRAC {koreaAirspaceData.metadata?.airac})</small>
+        <small>출처: eAIP Korea + Navigraph (AIRAC {koreaAirspaceData.metadata?.airac})</small>
       </div>
     </Accordion>
   );

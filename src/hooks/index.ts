@@ -38,5 +38,9 @@ export { default as useNotamData } from './useNotamData';
 // 절차 관련 훅
 export { default as useProcedureRendering } from './useProcedureRendering';
 
+// Global data 훅
+export { default as useGlobalData } from './useGlobalData';
+export { default as useGlobalLayers } from './useGlobalLayers';
+
 // 유틸리티 훅
 export { default as useWindowHeight } from './useWindowHeight';

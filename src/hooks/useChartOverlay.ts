@@ -30,18 +30,11 @@ const useChartOverlay = (
   useEffect(() => {
     if (!map?.current || !mapLoaded) return;
 
-    const safeRemove = (type: 'Layer' | 'Source', id: string): void => {
-      try {
-        const mapInstance = map.current as unknown as Record<string, (id: string) => unknown> | undefined;
-        if (!mapInstance) return;
-        const method = type === 'Layer' ? 'getLayer' : 'getSource';
-        const removeMethod = type === 'Layer' ? 'removeLayer' : 'removeSource';
-        const getterFn = mapInstance[method];
-        const removerFn = mapInstance[removeMethod] as ((id: string) => void) | undefined;
-        if (getterFn && typeof getterFn === 'function' && getterFn(id) && removerFn && typeof removerFn === 'function') {
-          removerFn(id);
-        }
-      } catch { /* ignore */ }
+    const safeRemoveLayer = (id: string): void => {
+      try { if (map.current?.getLayer(id)) map.current.removeLayer(id); } catch { /* ignore */ }
+    };
+    const safeRemoveSource = (id: string): void => {
+      try { if (map.current?.getSource(id)) map.current.removeSource(id); } catch { /* ignore */ }
     };
 
     // Get charts for selected airport
@@ -81,8 +74,8 @@ const useChartOverlay = (
           console.warn(`Failed to add chart overlay ${chartId}:`, e);
         }
       } else {
-        safeRemove('Layer', layerId);
-        safeRemove('Source', sourceId);
+        safeRemoveLayer(layerId);
+        safeRemoveSource(sourceId);
       }
     });
 
@@ -90,8 +83,8 @@ const useChartOverlay = (
     prevLayersRef.current.forEach(layerId => {
       if (!currentLayers.has(layerId)) {
         const sourceId = layerId.replace('chart-', 'chart-source-');
-        safeRemove('Layer', layerId);
-        safeRemove('Source', sourceId);
+        safeRemoveLayer(layerId);
+        safeRemoveSource(sourceId);
       }
     });
 

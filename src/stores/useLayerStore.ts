@@ -22,6 +22,20 @@ interface LayerState {
   showKoreaWaypoints: boolean;
   showKoreaNavaids: boolean;
   showKoreaAirspaces: boolean;
+  showKoreaAirports: boolean;
+  showKoreaHoldings: boolean;
+  showKoreaTerminalWaypoints: boolean;
+
+  // Global data layers
+  showGlobalAirports: boolean;
+  showGlobalNavaids: boolean;
+  showGlobalHeliports: boolean;
+  showGlobalWaypoints: boolean;
+  showGlobalAirways: boolean;
+  showGlobalHoldings: boolean;
+  showGlobalCtrlAirspace: boolean;
+  showGlobalRestrAirspace: boolean;
+  showGlobalFirUir: boolean;
 }
 
 interface LayerActions {
@@ -39,6 +53,20 @@ interface LayerActions {
   setShowKoreaWaypoints: (value: boolean) => void;
   setShowKoreaNavaids: (value: boolean) => void;
   setShowKoreaAirspaces: (value: boolean) => void;
+  setShowKoreaAirports: (value: boolean) => void;
+  setShowKoreaHoldings: (value: boolean) => void;
+  setShowKoreaTerminalWaypoints: (value: boolean) => void;
+
+  // Global data layers
+  setShowGlobalAirports: (value: boolean) => void;
+  setShowGlobalNavaids: (value: boolean) => void;
+  setShowGlobalHeliports: (value: boolean) => void;
+  setShowGlobalWaypoints: (value: boolean) => void;
+  setShowGlobalAirways: (value: boolean) => void;
+  setShowGlobalHoldings: (value: boolean) => void;
+  setShowGlobalCtrlAirspace: (value: boolean) => void;
+  setShowGlobalRestrAirspace: (value: boolean) => void;
+  setShowGlobalFirUir: (value: boolean) => void;
 
   // Toggle helpers
   toggleWaypoints: () => void;
@@ -68,6 +96,20 @@ const useLayerStore = create<LayerStore>((set) => ({
   showKoreaWaypoints: false,
   showKoreaNavaids: false,
   showKoreaAirspaces: false,
+  showKoreaAirports: false,
+  showKoreaHoldings: false,
+  showKoreaTerminalWaypoints: false,
+
+  // Global data layers
+  showGlobalAirports: false,
+  showGlobalNavaids: false,
+  showGlobalHeliports: false,
+  showGlobalWaypoints: false,
+  showGlobalAirways: false,
+  showGlobalHoldings: false,
+  showGlobalCtrlAirspace: false,
+  showGlobalRestrAirspace: false,
+  showGlobalFirUir: false,
 
   // Actions - RKPU layers
   setShowWaypoints: (value) => set({ showWaypoints: value }),
@@ -83,6 +125,20 @@ const useLayerStore = create<LayerStore>((set) => ({
   setShowKoreaWaypoints: (value) => set({ showKoreaWaypoints: value }),
   setShowKoreaNavaids: (value) => set({ showKoreaNavaids: value }),
   setShowKoreaAirspaces: (value) => set({ showKoreaAirspaces: value }),
+  setShowKoreaAirports: (value) => set({ showKoreaAirports: value }),
+  setShowKoreaHoldings: (value) => set({ showKoreaHoldings: value }),
+  setShowKoreaTerminalWaypoints: (value) => set({ showKoreaTerminalWaypoints: value }),
+
+  // Actions - Global data layers
+  setShowGlobalAirports: (value) => set({ showGlobalAirports: value }),
+  setShowGlobalNavaids: (value) => set({ showGlobalNavaids: value }),
+  setShowGlobalHeliports: (value) => set({ showGlobalHeliports: value }),
+  setShowGlobalWaypoints: (value) => set({ showGlobalWaypoints: value }),
+  setShowGlobalAirways: (value) => set({ showGlobalAirways: value }),
+  setShowGlobalHoldings: (value) => set({ showGlobalHoldings: value }),
+  setShowGlobalCtrlAirspace: (value) => set({ showGlobalCtrlAirspace: value }),
+  setShowGlobalRestrAirspace: (value) => set({ showGlobalRestrAirspace: value }),
+  setShowGlobalFirUir: (value) => set({ showGlobalFirUir: value }),
 
   // Toggle helpers
   toggleWaypoints: () => set((state) => ({ showWaypoints: !state.showWaypoints })),
@@ -102,6 +158,18 @@ const useLayerStore = create<LayerStore>((set) => ({
     showKoreaWaypoints: false,
     showKoreaNavaids: false,
     showKoreaAirspaces: false,
+    showKoreaAirports: false,
+    showKoreaHoldings: false,
+    showKoreaTerminalWaypoints: false,
+    showGlobalAirports: false,
+    showGlobalNavaids: false,
+    showGlobalHeliports: false,
+    showGlobalWaypoints: false,
+    showGlobalAirways: false,
+    showGlobalHoldings: false,
+    showGlobalCtrlAirspace: false,
+    showGlobalRestrAirspace: false,
+    showGlobalFirUir: false,
   }),
 }));
 

@@ -13,6 +13,12 @@ export interface WeatherDataState {
   source?: string;
 }
 
+export interface WeatherHealthStatus {
+  isConnected: boolean;
+  lastSuccessTime: number | null;
+  source: string | null; // 'api' or 'local-demo'
+}
+
 export interface UseWeatherDataReturn {
   weatherData: WeatherDataState | null;
   radarData: unknown;
@@ -22,6 +28,7 @@ export interface UseWeatherDataReturn {
   sigmetData: unknown;
   llwsData: unknown;
   fetchWeatherData: () => Promise<void>;
+  weatherHealth: WeatherHealthStatus;
 }
 
 /**
@@ -42,6 +49,11 @@ export default function useWeatherData(
 ): UseWeatherDataReturn {
   // METAR/TAF data
   const [weatherData, setWeatherData] = useState<WeatherDataState | null>(null);
+  const [weatherHealth, setWeatherHealth] = useState<WeatherHealthStatus>({
+    isConnected: false,
+    lastSuccessTime: null,
+    source: null
+  });
   const weatherIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Aviation weather layers
@@ -108,9 +120,17 @@ export default function useWeatherData(
 
       if (metarData || tafData) {
         setWeatherData({ metar: metarData, taf: tafData, source: usedFallback ? 'local-demo' : 'api' });
+        setWeatherHealth({
+          isConnected: true,
+          lastSuccessTime: Date.now(),
+          source: usedFallback ? 'local-demo' : 'api'
+        });
+      } else {
+        setWeatherHealth(prev => ({ ...prev, isConnected: false }));
       }
     } catch (e) {
       logger.error('Weather', 'Fetch failed', e as Error);
+      setWeatherHealth(prev => ({ ...prev, isConnected: false }));
     }
   }, []);
 
@@ -170,5 +190,6 @@ export default function useWeatherData(
     sigmetData,
     llwsData,
     fetchWeatherData,
+    weatherHealth,
   };
 }

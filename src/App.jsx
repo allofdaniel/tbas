@@ -11,9 +11,6 @@ import {
   useLayerStore,
 } from './stores';
 
-// Import toast hook
-import { useToast } from './components/Toast';
-
 // Import constants
 import {
   MAPBOX_ACCESS_TOKEN,
@@ -51,6 +48,7 @@ import {
   ViewControlsBar,
   AircraftControlPanel,
   KoreaAirspacePanel,
+  GlobalDataPanel,
 } from './components';
 
 // Import hooks
@@ -73,6 +71,8 @@ import {
   useMapInit,
   useDataLoading,
   useWindowHeight,
+  useGlobalData,
+  useGlobalLayers,
 } from './hooks';
 
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
@@ -116,6 +116,7 @@ function App() {
     metarPinned, setMetarPinned,
     tafPinned, setTafPinned,
     sectionExpanded, toggleSection,
+    globalExpanded, setGlobalExpanded,
   } = useUIStore();
 
   // Aircraft store
@@ -151,6 +152,18 @@ function App() {
     showKoreaWaypoints, setShowKoreaWaypoints,
     showKoreaNavaids, setShowKoreaNavaids,
     showKoreaAirspaces, setShowKoreaAirspaces,
+    showKoreaAirports, setShowKoreaAirports,
+    showKoreaHoldings, setShowKoreaHoldings,
+    showKoreaTerminalWaypoints, setShowKoreaTerminalWaypoints,
+    showGlobalAirports, setShowGlobalAirports,
+    showGlobalNavaids, setShowGlobalNavaids,
+    showGlobalHeliports, setShowGlobalHeliports,
+    showGlobalWaypoints, setShowGlobalWaypoints,
+    showGlobalAirways, setShowGlobalAirways,
+    showGlobalHoldings, setShowGlobalHoldings,
+    showGlobalCtrlAirspace, setShowGlobalCtrlAirspace,
+    showGlobalRestrAirspace, setShowGlobalRestrAirspace,
+    showGlobalFirUir, setShowGlobalFirUir,
   } = useLayerStore();
 
   // ============================================
@@ -159,13 +172,6 @@ function App() {
 
   const [activeCharts, setActiveCharts] = useState({});
   const [selectedChartAirport, setSelectedChartAirport] = useState('RKPU');
-
-  // ============================================
-  // Toast & Refs
-  // ============================================
-
-  const { addToast, updateToast, dismissToast } = useToast();
-  const flightTrackToastRef = useRef(null);
 
   // ============================================
   // Custom Hooks
@@ -204,10 +210,10 @@ function App() {
   // ATC hooks
   useAtcRadarRings(map, mapLoaded, atcOnlyMode, radarRange, radarBlackBackground);
   useAtcSectors(map, mapLoaded, atcData, selectedAtcSectors);
-  useKoreaAirspace(map, mapLoaded, koreaAirspaceData, showKoreaRoutes, showKoreaWaypoints, showKoreaNavaids, showKoreaAirspaces, is3DView, show3DAltitude);
+  useKoreaAirspace(map, mapLoaded, koreaAirspaceData, showKoreaRoutes, showKoreaWaypoints, showKoreaNavaids, showKoreaAirspaces, showKoreaAirports, is3DView, show3DAltitude, showKoreaHoldings, showKoreaTerminalWaypoints);
 
   // Aircraft data hook
-  const { aircraft, aircraftTrails } = useAircraftData(data, mapLoaded, showAircraft, trailDuration);
+  const { aircraft, aircraftTrails, dataHealth } = useAircraftData(data, mapLoaded, showAircraft, trailDuration);
 
   // Selected aircraft details hook
   const {
@@ -233,7 +239,7 @@ function App() {
   useAircraftClickHandler(map, mapLoaded, aircraft, selectedAircraft, setSelectedAircraft);
 
   // Weather data hook
-  const { weatherData, lightningData, sigmetData } = useWeatherData(
+  const { weatherData, lightningData, sigmetData, weatherHealth } = useWeatherData(
     data?.airport, false, false, showLightning, showSigmet, showWxPanel
   );
 
@@ -246,6 +252,7 @@ function App() {
     notamExpanded: notamItemExpanded, setNotamExpanded: setNotamItemExpanded,
     notamLocationsOnMap, setNotamLocationsOnMap,
     fetchNotamData,
+    notamHealth,
   } = useNotamData(showNotamPanel);
 
   // Weather layers hook
@@ -257,28 +264,20 @@ function App() {
   // Airspace layers hook
   useAirspaceLayers(map, mapLoaded, data, showWaypoints, showObstacles, showAirspace, show3DAltitude, is3DView, hasActiveProcedure);
 
+  // Global data hooks
+  const { data: globalData, counts: globalCounts, loading: globalLoading } = useGlobalData(
+    showGlobalAirports, showGlobalNavaids, showGlobalHeliports, showGlobalWaypoints,
+    showGlobalAirways, showGlobalHoldings, showGlobalCtrlAirspace, showGlobalRestrAirspace, showGlobalFirUir
+  );
+  useGlobalLayers(
+    map, mapLoaded, globalData,
+    showGlobalAirports, showGlobalNavaids, showGlobalHeliports, showGlobalWaypoints,
+    showGlobalAirways, showGlobalHoldings, showGlobalCtrlAirspace, showGlobalRestrAirspace, showGlobalFirUir
+  );
+
   // ============================================
   // Effects
   // ============================================
-
-  // Flight track loading toast notification
-  useEffect(() => {
-    if (flightTrackLoading && selectedAircraft) {
-      const callsign = selectedAircraft.callsign || selectedAircraft.hex;
-      flightTrackToastRef.current = addToast(`${callsign} 항적 불러오는 중...`, { type: 'loading' });
-    } else if (!flightTrackLoading && flightTrackToastRef.current) {
-      if (flightTrack?.path?.length > 0) {
-        const source = flightTrack.source === 'trino' ? 'Trino' : 'OpenSky';
-        updateToast(flightTrackToastRef.current, {
-          message: `항적 로드 완료 (${flightTrack.path.length}개 포인트, ${source})`,
-          type: 'success'
-        });
-      } else {
-        dismissToast(flightTrackToastRef.current);
-      }
-      flightTrackToastRef.current = null;
-    }
-  }, [flightTrackLoading, selectedAircraft, flightTrack, addToast, updateToast, dismissToast]);
 
   // Current time update
   useEffect(() => {
@@ -388,6 +387,9 @@ function App() {
       <TimeWeatherBar
         currentTime={currentTime}
         weatherData={weatherData}
+        dataHealth={dataHealth}
+        weatherHealth={weatherHealth}
+        notamHealth={notamHealth}
         showMetarPopup={showMetarPopup}
         setShowMetarPopup={setShowMetarPopup}
         metarPinned={metarPinned}
@@ -565,6 +567,38 @@ function App() {
             setShowKoreaNavaids={setShowKoreaNavaids}
             showKoreaAirspaces={showKoreaAirspaces}
             setShowKoreaAirspaces={setShowKoreaAirspaces}
+            showKoreaAirports={showKoreaAirports}
+            setShowKoreaAirports={setShowKoreaAirports}
+            showKoreaHoldings={showKoreaHoldings}
+            setShowKoreaHoldings={setShowKoreaHoldings}
+            showKoreaTerminalWaypoints={showKoreaTerminalWaypoints}
+            setShowKoreaTerminalWaypoints={setShowKoreaTerminalWaypoints}
+          />
+
+          {/* Global Data Panel */}
+          <GlobalDataPanel
+            globalExpanded={globalExpanded}
+            setGlobalExpanded={setGlobalExpanded}
+            counts={globalCounts}
+            loading={globalLoading}
+            showGlobalAirports={showGlobalAirports}
+            setShowGlobalAirports={setShowGlobalAirports}
+            showGlobalNavaids={showGlobalNavaids}
+            setShowGlobalNavaids={setShowGlobalNavaids}
+            showGlobalHeliports={showGlobalHeliports}
+            setShowGlobalHeliports={setShowGlobalHeliports}
+            showGlobalWaypoints={showGlobalWaypoints}
+            setShowGlobalWaypoints={setShowGlobalWaypoints}
+            showGlobalAirways={showGlobalAirways}
+            setShowGlobalAirways={setShowGlobalAirways}
+            showGlobalHoldings={showGlobalHoldings}
+            setShowGlobalHoldings={setShowGlobalHoldings}
+            showGlobalCtrlAirspace={showGlobalCtrlAirspace}
+            setShowGlobalCtrlAirspace={setShowGlobalCtrlAirspace}
+            showGlobalRestrAirspace={showGlobalRestrAirspace}
+            setShowGlobalRestrAirspace={setShowGlobalRestrAirspace}
+            showGlobalFirUir={showGlobalFirUir}
+            setShowGlobalFirUir={setShowGlobalFirUir}
           />
 
           {/* Aircraft Control Panel */}

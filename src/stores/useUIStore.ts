@@ -8,7 +8,7 @@ import { create } from 'zustand';
  */
 
 type AccordionName = 'layersExpanded' | 'aircraftExpanded' | 'sidExpanded' |
-  'starExpanded' | 'apchExpanded' | 'chartExpanded' | 'koreaRoutesExpanded';
+  'starExpanded' | 'apchExpanded' | 'chartExpanded' | 'koreaRoutesExpanded' | 'globalExpanded';
 
 type AtcSection = 'ACC' | 'TMA' | 'CTR';
 
@@ -26,6 +26,7 @@ interface UIState {
   apchExpanded: boolean;
   chartExpanded: boolean;
   koreaRoutesExpanded: boolean;
+  globalExpanded: boolean;
 
   // ATC panel
   showAtcPanel: boolean;
@@ -62,6 +63,7 @@ interface UIActions {
   setApchExpanded: (value: boolean) => void;
   setChartExpanded: (value: boolean) => void;
   setKoreaRoutesExpanded: (value: boolean) => void;
+  setGlobalExpanded: (value: boolean) => void;
   toggleAccordion: (name: AccordionName) => void;
 
   // ATC
@@ -106,6 +108,7 @@ const useUIStore = create<UIStore>((set) => ({
   apchExpanded: false,
   chartExpanded: false,
   koreaRoutesExpanded: false,
+  globalExpanded: false,
 
   // ATC panel
   showAtcPanel: false,
@@ -146,6 +149,7 @@ const useUIStore = create<UIStore>((set) => ({
   setApchExpanded: (value) => set({ apchExpanded: value }),
   setChartExpanded: (value) => set({ chartExpanded: value }),
   setKoreaRoutesExpanded: (value) => set({ koreaRoutesExpanded: value }),
+  setGlobalExpanded: (value) => set({ globalExpanded: value }),
   toggleAccordion: (name) => set((state) => ({ [name]: !state[name] })),
 
   // Actions - ATC

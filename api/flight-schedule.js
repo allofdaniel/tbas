@@ -1,8 +1,11 @@
 // Vercel Serverless Function - aviationstack 프록시 (Mixed Content 해결)
+import { setCorsHeaders, checkRateLimit } from './_utils/cors.js';
+
 export default async function handler(req, res) {
-  // CORS 헤더
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  // DO-278A SRS-SEC-002: Use secure CORS headers
+  if (setCorsHeaders(req, res)) return;
+  // DO-278A SRS-SEC-003: Rate Limiting
+  if (checkRateLimit(req, res)) return;
 
   const { flight } = req.query;
 

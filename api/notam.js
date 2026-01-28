@@ -1,3 +1,5 @@
+import { setCorsHeaders, checkRateLimit } from './_utils/cors.js';
+
 // Parse NOTAM Q-line coordinates (e.g., "3505N12804E005" -> {lat, lon})
 function parseNotamCoordinates(fullText) {
   if (!fullText) return null;
@@ -99,13 +101,14 @@ function isValidInPeriod(notam, period) {
 }
 
 export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // DO-278A SRS-SEC-002: Use secure CORS headers
+  if (setCorsHeaders(req, res)) {
+    return; // Preflight request handled
+  }
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // DO-278A SRS-SEC-003: Rate Limiting
+  if (checkRateLimit(req, res)) {
+    return; // Rate limit exceeded
   }
 
   try {
@@ -256,18 +259,38 @@ export default async function handler(req, res) {
       lastModified: latestFile.LastModified,
     });
   } catch (error) {
-    console.error('NOTAM S3 error:', error.message, error.stack);
+    // DO-278A SRS-SEC-007: 스택트레이스 로깅 제거
+    console.error('NOTAM S3 error:', error.message);
 
     // Fallback to original API if S3 fails
+    // DO-278A SRS-SEC-005: 하드코딩된 IP 대신 환경변수 사용
+    const NOTAM_FALLBACK_API = process.env.NOTAM_FALLBACK_API || '';
+    if (!NOTAM_FALLBACK_API) {
+      // Fallback API가 설정되지 않은 경우 에러 반환
+      return res.status(503).json({
+        error: 'Service temporarily unavailable',
+        code: 'S3_ERROR_NO_FALLBACK',
+        details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+      });
+    }
+
     try {
-      const response = await fetch('http://3.27.240.67:8000/notams/realtime?limit=500');
+      const response = await fetch(`${NOTAM_FALLBACK_API}/notams/realtime?limit=500`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
       const data = await response.json();
-      res.status(200).json({ ...data, source: 'api-fallback', s3Error: error.message });
+      res.status(200).json({ ...data, source: 'api-fallback' });
     } catch (fallbackError) {
-      res.status(500).json({ error: error.message, fallbackError: fallbackError.message });
+      // DO-278A SRS-SEC-006: 프로덕션에서 에러 상세 숨김
+      res.status(500).json({
+        error: 'NOTAM service temporarily unavailable',
+        code: 'NOTAM_ERROR',
+        ...(process.env.NODE_ENV === 'development' && {
+          details: error.message,
+          fallbackDetails: fallbackError.message
+        })
+      });
     }
   }
 }

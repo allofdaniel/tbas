@@ -16,7 +16,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BASE_URL = "https://ubikais.fois.go.kr:8030"
 
 # Session cookie from Playwright browser (update this after fresh login)
-JSESSIONID = "asyXmbvs5cCfIMnYG27YTAEtZWSPkbTOb1SEarACmQDh3gjztZ7igVG1kpqQ6uEq.amV1c19kb21haW4vdWJpa2Fpc18y"
+# Updated: 2026-01-19 23:37 KST
+JSESSIONID = "wakcBUKlpB1Vzjbz8B8wajTdrBjsJQGIwReSOM8zCoH9baoztypR6cNWmWqIV7QE.amV1c19kb21haW4vdWJpa2Fpc18y"
 
 def get_session():
     session = requests.Session()
@@ -255,6 +256,45 @@ def fetch_sequence_list(session, series="C"):
             print(f"JSON parse error: {response.text[:200]}")
     return None
 
+def fetch_ad_notam_series_a(session, airport="RKSI"):
+    """Fetch AD NOTAM for specific airport using Series A (for civil airports)"""
+    print(f"\n{'='*60}")
+    print(f"Fetching AD NOTAM Series A ({airport})")
+    print('='*60)
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_short = datetime.now().strftime("%y%m%d")
+
+    url = f"{BASE_URL}/sysUbikais/biz/nps/selectNotamRecAd.fois"
+    params = {
+        "downloadYn": "1",
+        "srchFir": "RKRR",
+        "srchSeries": "A",  # Series A for civil airports!
+        "srchAd": airport,
+        "srchValid": today,
+        "srchValidsh": f"{today_short}2359",
+        "srchValidsh2": f"{today_short}0000",
+        "srchValid2": "1",
+        "cmd": "get-records",
+        "limit": "500",
+        "offset": "0"
+    }
+
+    headers = get_headers(f"{BASE_URL}/sysUbikais/biz/nps/notamRecAd")
+    response = session.get(url, params=params, headers=headers)
+    print(f"Status: {response.status_code}")
+
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            records = data.get('records', [])
+            print(f"Total: {data.get('total', len(records))} records")
+            return data
+        except json.JSONDecodeError:
+            print(f"JSON parse error: {response.text[:200]}")
+    return None
+
+
 def main():
     print("=" * 70)
     print("UBIKAIS All NOTAM Types Test")
@@ -266,15 +306,17 @@ def main():
     session = get_session()
     all_data = {}
 
-    # 1. RK NOTAM (Series C - default)
-    data = fetch_rk_notam(session, "C")
-    if data:
-        all_data['rk_notam_C'] = data
+    # 1. RK NOTAM (FIR level) - all series
+    for series in ["A", "C", "D", "E"]:
+        data = fetch_rk_notam(session, series)
+        if data and data.get('records'):
+            all_data[f'rk_notam_{series}'] = data
 
-    # 2. AD NOTAM for multiple airports
-    for airport in ["RKSI", "RKPU", "RKPC"]:
-        data = fetch_ad_notam(session, airport)
-        if data:
+    # 2. AD NOTAM for civil airports - Series A!
+    civil_airports = ["RKSI", "RKSS", "RKPK", "RKPC", "RKPU", "RKTN", "RKJJ", "RKJY", "RKTH", "RKPS", "RKJB"]
+    for airport in civil_airports:
+        data = fetch_ad_notam_series_a(session, airport)
+        if data and data.get('records'):
             all_data[f'ad_notam_{airport}'] = data
 
     # 3. SNOWTAM
@@ -287,10 +329,11 @@ def main():
     if data:
         all_data['prohibited_area'] = data
 
-    # 5. Sequence List
-    data = fetch_sequence_list(session)
-    if data:
-        all_data['sequence_list'] = data
+    # 5. Sequence List - all series
+    for series in ["A", "C", "D", "E", "G", "Z"]:
+        data = fetch_sequence_list(session, series)
+        if data and data.get('records'):
+            all_data[f'sequence_list_{series}'] = data
 
     # Save all data
     output_file = f"./data/all_notam_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"

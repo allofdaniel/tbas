@@ -1,23 +1,57 @@
 // Vercel Serverless Function - Aviation Weather Data for Korea
 // KMA API Hub (apihub.kma.go.kr) + International Sources
+// DO-278A 요구사항 추적: SRS-SEC-001
 
-const KMA_API_KEY = 'eTO-ROGnRsezvkThp6bH8w';
+import { setCorsHeaders, checkRateLimit } from './_utils/cors.js';
+
+/**
+ * 환경변수에서 KMA API 키 로드
+ * Vercel 환경변수 또는 .env 파일에서 KMA_API_KEY 설정 필요
+ */
+const KMA_API_KEY = process.env.KMA_API_KEY;
 const ULSAN_STN = '151'; // 울산공항 지점번호
+
+// API 키 검증
+if (!KMA_API_KEY) {
+  console.error(
+    '[TBAS Weather API] KMA_API_KEY 환경변수가 설정되지 않았습니다.\n' +
+    'Vercel Dashboard > Settings > Environment Variables에서 설정하거나\n' +
+    '.env 파일에 KMA_API_KEY=your_key_here 형태로 추가하세요.'
+  );
+}
 
 // Ulsan Airport coordinates for Open-Meteo
 const ULSAN_LAT = 35.5934;
 const ULSAN_LON = 129.3517;
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // DO-278A SRS-SEC-002: Use secure CORS headers
+  if (setCorsHeaders(req, res)) {
+    return; // Preflight request handled
+  }
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // DO-278A SRS-SEC-003: Rate Limiting
+  if (checkRateLimit(req, res)) {
+    return; // Rate limit exceeded
   }
 
   const type = req.query.type || 'metar';
+
+  // KMA API 키가 필요한 엔드포인트 목록
+  const kmaRequiredTypes = [
+    'metar', 'amos', 'kma_metar', 'kma_taf', 'kma_sigmet', 'kma_airmet',
+    'warning', 'llws', 'sigwx', 'radar', 'satellite', 'lightning'
+  ];
+
+  // KMA API 키 검증 (필요한 경우)
+  if (kmaRequiredTypes.includes(type) && !KMA_API_KEY) {
+    console.error('[TBAS Weather API] KMA_API_KEY not configured for:', type);
+    return res.status(503).json({
+      error: 'Weather service temporarily unavailable',
+      code: 'KMA_API_KEY_MISSING',
+      message: 'KMA API key is not configured. Contact administrator.'
+    });
+  }
 
   try {
     switch (type) {
@@ -59,7 +93,12 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('Weather API error:', error.message);
-    return res.status(500).json({ error: error.message });
+    // DO-278A SRS-SEC-006: 프로덕션에서 에러 상세 숨김
+    return res.status(500).json({
+      error: 'Weather service temporarily unavailable',
+      code: 'WEATHER_ERROR',
+      ...(process.env.NODE_ENV === 'development' && { details: error.message })
+    });
   }
 }
 

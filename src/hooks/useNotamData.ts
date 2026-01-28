@@ -50,6 +50,13 @@ const getNotamCacheAge = (period: string): number | null => {
   return Date.now() - cached.timestamp;
 };
 
+export interface NotamHealthStatus {
+  isConnected: boolean;
+  lastSuccessTime: number | null;
+  notamCount: number;
+  source: string | null;
+}
+
 export interface UseNotamDataReturn {
   notamData: NotamData | null;
   setNotamData: React.Dispatch<React.SetStateAction<NotamData | null>>;
@@ -67,6 +74,7 @@ export interface UseNotamDataReturn {
   notamLocationsOnMap: Set<string>;
   setNotamLocationsOnMap: React.Dispatch<React.SetStateAction<Set<string>>>;
   fetchNotamData: (period?: string, forceRefresh?: boolean) => Promise<void>;
+  notamHealth: NotamHealthStatus;
 }
 
 export default function useNotamData(showNotamPanel: boolean): UseNotamDataReturn {
@@ -79,6 +87,12 @@ export default function useNotamData(showNotamPanel: boolean): UseNotamDataRetur
   const [notamLocationFilter, setNotamLocationFilter] = useState(''); // 전체 지역
   const [notamExpanded, setNotamExpanded] = useState<Record<string, boolean>>({});
   const [notamLocationsOnMap, setNotamLocationsOnMap] = useState<Set<string>>(new Set()); // e.g., Set(['RKPU', 'RKTN'])
+  const [notamHealth, setNotamHealth] = useState<NotamHealthStatus>({
+    isConnected: false,
+    lastSuccessTime: null,
+    notamCount: 0,
+    source: null
+  });
 
   // NOTAM data fetching with caching - always use complete DB with period filtering
   const fetchNotamData = useCallback(async (period: string = notamPeriod, forceRefresh = false): Promise<void> => {
@@ -177,9 +191,16 @@ export default function useNotamData(showNotamPanel: boolean): UseNotamDataRetur
       setNotamCacheAge(0);
 
       setNotamData(json);
+      setNotamHealth({
+        isConnected: true,
+        lastSuccessTime: Date.now(),
+        notamCount: json.data?.length || 0,
+        source: json.source || 'api'
+      });
     } catch (e) {
       logger.error('NOTAM', 'Fetch failed', e as Error);
       setNotamError((e as Error).message);
+      setNotamHealth(prev => ({ ...prev, isConnected: false }));
 
       // 3. 네트워크 에러 시 만료된 메모리 캐시라도 사용 시도
       const expiredCache = notamMemoryCache[period];
@@ -216,5 +237,6 @@ export default function useNotamData(showNotamPanel: boolean): UseNotamDataRetur
     notamLocationsOnMap,
     setNotamLocationsOnMap,
     fetchNotamData,
+    notamHealth,
   };
 }

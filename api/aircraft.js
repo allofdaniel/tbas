@@ -1,25 +1,58 @@
-// Vercel Serverless Function - Proxy for airplanes.live API
+/**
+ * Vercel Serverless Function - Proxy for airplanes.live API
+ * DO-278A 요구사항 추적: SRS-API-002
+ */
+import { setCorsHeaders, checkRateLimit } from './_utils/cors.js';
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 's-maxage=2, stale-while-revalidate=5');
+/**
+ * 좌표 유효성 검증
+ * @param {string} lat - 위도
+ * @param {string} lon - 경도
+ * @param {string} radius - 반경
+ * @returns {{ valid: boolean, error?: string, values?: object }}
+ */
+function validateCoordinates(lat, lon, radius) {
+  const latNum = parseFloat(lat);
+  const lonNum = parseFloat(lon);
+  const radiusNum = parseFloat(radius) || 100;
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  if (isNaN(latNum) || latNum < -90 || latNum > 90) {
+    return { valid: false, error: 'Invalid latitude. Must be between -90 and 90.' };
   }
+  if (isNaN(lonNum) || lonNum < -180 || lonNum > 180) {
+    return { valid: false, error: 'Invalid longitude. Must be between -180 and 180.' };
+  }
+  if (radiusNum < 1 || radiusNum > 500) {
+    return { valid: false, error: 'Invalid radius. Must be between 1 and 500 nm.' };
+  }
+
+  return { valid: true, values: { lat: latNum, lon: lonNum, radius: radiusNum } };
+}
+
+export default async function handler(req, res) {
+  // DO-278A SRS-SEC-002: CORS 처리 (강화된 버전)
+  if (setCorsHeaders(req, res)) return;
+  // DO-278A SRS-SEC-003: Rate Limiting
+  if (checkRateLimit(req, res)) return;
+
+  res.setHeader('Cache-Control', 's-maxage=2, stale-while-revalidate=5');
 
   const { lat, lon, radius } = req.query;
 
   if (!lat || !lon) {
-    return res.status(400).json({ error: 'lat and lon parameters are required' });
+    return res.status(400).json({ error: 'lat and lon parameters are required', ac: [] });
   }
 
-  const r = radius || 100;
-  const apiUrl = `https://api.airplanes.live/v2/point/${lat}/${lon}/${r}`;
+  // DO-278A SRS-SEC-004: 입력 검증
+  const validation = validateCoordinates(lat, lon, radius);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error, ac: [] });
+  }
+
+  const { lat: validLat, lon: validLon, radius: r } = validation.values;
+  const apiUrl = `https://api.airplanes.live/v2/point/${validLat}/${validLon}/${r}`;
 
   // Retry logic with exponential backoff
   const maxRetries = 3;

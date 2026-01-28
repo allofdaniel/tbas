@@ -1,5 +1,9 @@
-// Vercel Serverless Function - OpenSky Flight Track API
-// Uses OAuth2 authentication for better rate limits and data access
+/**
+ * Vercel Serverless Function - OpenSky Flight Track API
+ * DO-278A 요구사항 추적: SRS-API-003
+ * Uses OAuth2 authentication for better rate limits and data access
+ */
+import { setCorsHeaders, checkRateLimit } from './_utils/cors.js';
 
 const OPENSKY_API_URL = 'https://opensky-network.org/api';
 const OPENSKY_AUTH_URL = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token';
@@ -83,21 +87,38 @@ async function fetchFlightTrack(icao24, accessToken) {
   return response.json();
 }
 
-export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+/**
+ * ICAO24 주소 유효성 검증
+ * @param {string} icao24 - ICAO 24비트 주소 (hex)
+ * @returns {{ valid: boolean, error?: string }}
+ */
+function validateIcao24(icao24) {
+  // ICAO24는 6자리 hex 문자열
+  const validPattern = /^[0-9a-fA-F]{6}$/;
+  if (!validPattern.test(icao24)) {
+    return { valid: false, error: 'Invalid ICAO24: must be 6-character hex string' };
   }
+  return { valid: true };
+}
+
+export default async function handler(req, res) {
+  // DO-278A SRS-SEC-002: CORS 처리 (강화된 버전)
+  if (setCorsHeaders(req, res)) return;
+  // DO-278A SRS-SEC-003: Rate Limiting
+  if (checkRateLimit(req, res)) return;
+
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
 
   const { icao24 } = req.query;
 
   if (!icao24) {
     return res.status(400).json({ error: 'icao24 parameter is required' });
+  }
+
+  // DO-278A SRS-SEC-004: 입력 검증
+  const validation = validateIcao24(icao24);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
   }
 
   try {
@@ -154,7 +175,8 @@ export default async function handler(req, res) {
     console.error('[OpenSky] Error:', error);
     return res.status(500).json({
       error: 'Failed to fetch flight track',
-      details: error.message,
+      // DO-278A SRS-SEC-006: 프로덕션에서 에러 상세 숨김
+      ...(process.env.NODE_ENV === 'development' && { details: error.message }),
       path: [],
     });
   }

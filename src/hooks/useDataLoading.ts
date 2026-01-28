@@ -102,6 +102,165 @@ export interface KoreaAirspaceMetadata {
   airac?: string;
   extracted?: string;
   url?: string;
+  navigraph_cycle?: string;
+  navigraph_db?: string;
+  airports_count?: number;
+  navaids_count?: number;
+  waypoints_count?: number;
+  routes_count?: number;
+  airspaces_count?: number;
+  gates_count?: number;
+  sids_count?: number;
+  stars_count?: number;
+  iaps_count?: number;
+  holdings_count?: number;
+  msa_count?: number;
+  markers_count?: number;
+  terminal_waypoints_count?: number;
+  frequencies_count?: number;
+  enroute_comms_count?: number;
+}
+
+export interface KoreaRunway {
+  id: string;
+  lat: number;
+  lon: number;
+  length_m: number;
+  width_m: number;
+  heading_mag: number | null;
+  heading_true: number | null;
+  elevation_ft: number;
+  surface: string;
+  lights: boolean;
+  ils_ident: string | null;
+  ils_cat: string | null;
+}
+
+export interface KoreaILS {
+  runway: string;
+  ident: string;
+  freq: string;
+  category: string;
+  course: number | null;
+  gs_angle: number;
+  gs_elev: number;
+  llz_lat: number;
+  llz_lon: number;
+  gs_lat: number;
+  gs_lon: number;
+}
+
+export interface KoreaComm {
+  type: string;
+  callsign: string;
+  freq: string;
+}
+
+export interface KoreaAirport {
+  icao: string;
+  iata: string | null;
+  name: string;
+  city: string;
+  lat: number;
+  lon: number;
+  elevation_ft: number;
+  mag_var: number;
+  transition_alt: number;
+  transition_level: number;
+  type: 'civil' | 'military' | 'joint';
+  ifr: boolean;
+  runways: KoreaRunway[];
+  ils: KoreaILS[];
+  comms: KoreaComm[];
+  gates?: KoreaGate[];
+  frequencies?: KoreaFrequency[];
+}
+
+export interface KoreaGate {
+  id: string;
+  name: string | null;
+  lat: number;
+  lon: number;
+}
+
+export interface KoreaFrequency {
+  type: string;
+  freq: number;
+  callsign: string | null;
+  sector: string | null;
+}
+
+export interface KoreaHolding {
+  waypoint: string;
+  name: string;
+  lat: number;
+  lon: number;
+  inbound_course: number;
+  turn: string;
+  leg_time: number | null;
+  leg_length: number | null;
+  speed: number | null;
+  min_alt: number | null;
+  max_alt: number | null;
+}
+
+export interface KoreaEnrouteComm {
+  type: string;
+  callsign: string;
+  freq: number;
+  fir: string;
+  lat: number;
+  lon: number;
+}
+
+export interface KoreaProcedureLeg {
+  seq: number;
+  wpt: string | null;
+  path: string | null;
+  course: number | null;
+  dist: number | null;
+  alt_desc: string | null;
+  alt1: number | null;
+  alt2: number | null;
+  spd_lim: number | null;
+  turn: string | null;
+}
+
+export interface KoreaProcedures {
+  sids: Record<string, Record<string, KoreaProcedureLeg[]>>;
+  stars: Record<string, Record<string, KoreaProcedureLeg[]>>;
+  iaps: Record<string, Record<string, KoreaProcedureLeg[]>>;
+}
+
+export interface KoreaMSASector {
+  bearing: number;
+  altitude: number;
+}
+
+export interface KoreaMSA {
+  airport: string;
+  center: string;
+  radius: number;
+  sectors: KoreaMSASector[];
+}
+
+export interface KoreaMarker {
+  airport: string;
+  runway: string;
+  llz: string;
+  type: string;
+  id: string | null;
+  lat: number;
+  lon: number;
+}
+
+export interface KoreaTerminalWaypoint {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  type: string;
+  region: string;
 }
 
 export interface KoreaAirspaceData {
@@ -109,6 +268,13 @@ export interface KoreaAirspaceData {
   routes?: KoreaRoute[];
   navaids?: KoreaNavaid[];
   airspaces?: KoreaAirspace[];
+  airports?: KoreaAirport[];
+  holdings?: KoreaHolding[];
+  enrouteComms?: KoreaEnrouteComm[];
+  procedures?: KoreaProcedures;
+  msa?: KoreaMSA[];
+  markers?: KoreaMarker[];
+  terminalWaypoints?: KoreaTerminalWaypoint[];
   metadata?: KoreaAirspaceMetadata;
 }
 
@@ -222,7 +388,8 @@ export default function useDataLoading(): UseDataLoadingReturn {
       .then((res) => res.json())
       .then((data: KoreaAirspaceData) => {
         setKoreaAirspaceData(data);
-        logger.info('DataLoading', `Loaded Korea airspace: ${data.waypoints?.length} waypoints, ${data.routes?.length} routes, ${data.navaids?.length} navaids, ${data.airspaces?.length} airspaces (AIRAC ${data.metadata?.airac})`);
+        const m = data.metadata;
+        logger.info('DataLoading', `Loaded Korea airspace: ${data.airports?.length || 0} airports, ${data.waypoints?.length} waypoints, ${data.routes?.length} routes, ${data.navaids?.length} navaids, ${data.airspaces?.length} airspaces, ${data.holdings?.length || 0} holdings, ${m?.sids_count || 0} SID legs, ${m?.stars_count || 0} STAR legs, ${m?.iaps_count || 0} IAP legs, ${data.terminalWaypoints?.length || 0} terminal WPTs (AIRAC ${m?.airac}, Navigraph ${m?.navigraph_cycle || 'N/A'})`);
       })
       .catch((err) => logger.warn('DataLoading', 'Failed to load Korea airspace data', { error: (err as Error).message }));
   }, []);

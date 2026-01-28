@@ -1,16 +1,15 @@
 // Vercel Serverless Function - Proxy for airplanes.live trace API
+import { setCorsHeaders, checkRateLimit } from './_utils/cors.js';
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 's-maxage=2, stale-while-revalidate=5');
+  // DO-278A SRS-SEC-002: Use secure CORS headers
+  if (setCorsHeaders(req, res)) return;
+  // DO-278A SRS-SEC-003: Rate Limiting
+  if (checkRateLimit(req, res)) return;
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  res.setHeader('Cache-Control', 's-maxage=2, stale-while-revalidate=5');
 
   const { hex } = req.query;
 

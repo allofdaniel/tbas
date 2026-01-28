@@ -18,6 +18,7 @@ export { default as AircraftDetailPanel } from './AircraftDetailPanel';
 export { default as AtcPanel } from './AtcPanel';
 export { default as AircraftControlPanel } from './AircraftControlPanel';
 export { default as KoreaAirspacePanel } from './KoreaAirspacePanel';
+export { default as GlobalDataPanel } from './GlobalDataPanel';
 
 // Bars
 export { default as TimeWeatherBar } from './TimeWeatherBar';

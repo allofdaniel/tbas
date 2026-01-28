@@ -315,8 +315,21 @@ const LocationFilter: React.FC<LocationFilterProps> = ({ notamData, notamLocatio
  * Map Toggle Section Component
  */
 const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamPeriod, notamLocationsOnMap, setNotamLocationsOnMap }) => {
+  // Calculate NOTAM counts based on period first
+  const getNotamCounts = (): Record<string, number> => {
+    const counts: Record<string, number> = {};
+    const cancelledSet = buildCancelledNotamSet(notamData?.data || []);
+    notamData?.data?.forEach(n => {
+      if (!isNotamInPeriod(n, notamPeriod, cancelledSet)) return;
+      counts[n.location || ''] = (counts[n.location || ''] || 0) + 1;
+    });
+    return counts;
+  };
+  const notamCounts = getNotamCounts();
+
   const locations = [...new Set(notamData?.data?.map(n => n.location).filter(Boolean) as string[])];
-  const locationsWithCoords = locations.filter(loc => AIRPORT_COORDINATES[loc]);
+  // Only show locations with coordinates AND with NOTAMs in the current period
+  const locationsWithCoords = locations.filter(loc => AIRPORT_COORDINATES[loc] && (notamCounts[loc] || 0) > 0);
 
   // Group by country
   const byCountry: Record<string, string[]> = {};
@@ -350,20 +363,6 @@ const MapToggleSection: React.FC<MapToggleSectionProps> = ({ notamData, notamPer
     locs.forEach(loc => allSelected ? newSet.delete(loc) : newSet.add(loc));
     setNotamLocationsOnMap(newSet);
   };
-
-  // Calculate NOTAM counts based on period
-  const getNotamCounts = (): Record<string, number> => {
-    const counts: Record<string, number> = {};
-    const cancelledSet = buildCancelledNotamSet(notamData?.data || []);
-    notamData?.data?.forEach(n => {
-      // Use period-based filtering for counts
-      if (!isNotamInPeriod(n, notamPeriod, cancelledSet)) return;
-      counts[n.location || ''] = (counts[n.location || ''] || 0) + 1;
-    });
-    return counts;
-  };
-
-  const notamCounts = getNotamCounts();
 
   const renderChips = (locs: string[], label: string): React.ReactNode => locs.length > 0 && (
     <div className="notam-country-subgroup" key={label}>

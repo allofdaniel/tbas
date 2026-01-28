@@ -50,6 +50,13 @@ export interface DataWithAirport extends AviationData {
   airport?: { lat: number; lon: number };
 }
 
+export interface DataHealthStatus {
+  isConnected: boolean;
+  lastSuccessTime: number | null;
+  aircraftCount: number;
+  errorCount: number;
+}
+
 export interface UseAircraftDataReturn {
   aircraft: AircraftData[];
   setAircraft: React.Dispatch<React.SetStateAction<AircraftData[]>>;
@@ -57,6 +64,7 @@ export interface UseAircraftDataReturn {
   setAircraftTrails: React.Dispatch<React.SetStateAction<AircraftTrails>>;
   tracesLoaded: Set<string>;
   setTracesLoaded: React.Dispatch<React.SetStateAction<Set<string>>>;
+  dataHealth: DataHealthStatus;
 }
 
 /**
@@ -75,6 +83,12 @@ export default function useAircraftData(
   const [aircraft, setAircraft] = useState<AircraftData[]>([]);
   const [aircraftTrails, setAircraftTrails] = useState<AircraftTrails>({});
   const [tracesLoaded, setTracesLoaded] = useState<Set<string>>(new Set());
+  const [dataHealth, setDataHealth] = useState<DataHealthStatus>({
+    isConnected: false,
+    lastSuccessTime: null,
+    aircraftCount: 0,
+    errorCount: 0
+  });
   const aircraftIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // tracesLoaded를 ref로도 유지하여 fetchAircraftData의 dependency 순환 방지
   const tracesLoadedRef = useRef<Set<string>>(new Set());
@@ -171,6 +185,7 @@ export default function useAircraftData(
         lastErrorTimeRef.current = Date.now();
         backoffRef.current = Math.min((backoffRef.current || 15000) * 2, 120000); // 최대 2분
         logger.warn('Aircraft', `API 429: backing off for ${backoffRef.current / 1000}s`);
+        setDataHealth(prev => ({ ...prev, isConnected: false, errorCount: prev.errorCount + 1 }));
         return;
       }
 
@@ -287,10 +302,19 @@ export default function useAircraftData(
       });
       tracesLoadedRef.current = newTracesLoaded;
       setAircraft(processed);
+
+      // 데이터 헬스 업데이트
+      setDataHealth({
+        isConnected: true,
+        lastSuccessTime: Date.now(),
+        aircraftCount: processed.length,
+        errorCount: 0
+      });
     } catch (e) {
       // AbortError는 정상적인 cleanup이므로 무시
       if (e instanceof Error && e.name === 'AbortError') return;
       logger.error('Aircraft', 'Fetch failed', e as Error);
+      setDataHealth(prev => ({ ...prev, isConnected: false, errorCount: prev.errorCount + 1 }));
     }
   }, [data?.airport, trailDuration, loadAircraftTrace]);
 
@@ -316,6 +340,7 @@ export default function useAircraftData(
     aircraftTrails,
     setAircraftTrails,
     tracesLoaded,
-    setTracesLoaded
+    setTracesLoaded,
+    dataHealth
   };
 }

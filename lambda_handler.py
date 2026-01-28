@@ -37,16 +37,38 @@ def dict_from_row(row):
     return dict(zip(row.keys(), row))
 
 
-def create_response(status_code, body):
-    """Lambda 응답 생성"""
+def create_response(status_code, body, origin=None):
+    """Lambda 응답 생성 - DO-278A SRS-SEC-002: CORS 화이트리스트"""
+    # 허용된 오리진 목록
+    ALLOWED_ORIGINS = [
+        'https://rkpu-viewer.vercel.app',
+        'https://tbas.vercel.app',
+        'http://localhost:5173',
+        'http://localhost:3000',
+    ]
+
+    # 환경변수에서 추가 오리진 로드
+    extra_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',')
+    ALLOWED_ORIGINS.extend([o.strip() for o in extra_origins if o.strip()])
+
+    # 오리진 검증
+    cors_origin = None
+    if origin and origin in ALLOWED_ORIGINS:
+        cors_origin = origin
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'X-Content-Type-Options': 'nosniff',
+    }
+
+    if cors_origin:
+        headers['Access-Control-Allow-Origin'] = cors_origin
+
     return {
         'statusCode': status_code,
-        'headers': {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type'
-        },
+        'headers': headers,
         'body': json.dumps(body, ensure_ascii=False, default=str)
     }
 
@@ -59,9 +81,13 @@ def handler(event, context):
         path = event.get('path', '/')
         query_params = event.get('queryStringParameters') or {}
 
+        # 요청 오리진 추출
+        headers = event.get('headers') or {}
+        origin = headers.get('origin') or headers.get('Origin')
+
         # OPTIONS (CORS preflight)
         if http_method == 'OPTIONS':
-            return create_response(200, {'status': 'ok'})
+            return create_response(200, {'status': 'ok'}, origin)
 
         # 라우팅
         if path == '/' or path == '/api':

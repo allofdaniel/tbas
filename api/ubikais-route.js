@@ -1,9 +1,12 @@
 // Vercel Serverless Function - UBIKAIS API 프록시 (비행 경로 정보)
 // UBIKAIS 크롤링 데이터에서 출발/도착 정보 가져오기
+import { setCorsHeaders, checkRateLimit } from './_utils/cors.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  // DO-278A SRS-SEC-002: Use secure CORS headers
+  if (setCorsHeaders(req, res)) return;
+  // DO-278A SRS-SEC-003: Rate Limiting
+  if (checkRateLimit(req, res)) return;
 
   const { callsign, reg, hex } = req.query;
 

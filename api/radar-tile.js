@@ -1,21 +1,42 @@
 /**
  * RainViewer Radar Tile Proxy API
+ * DO-278A 요구사항 추적: SRS-API-004
  * CORS 문제 해결을 위한 레이더 타일 프록시
  */
-export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+import { setCorsHeaders } from './_utils/cors.js';
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+/**
+ * 경로 유효성 검증 - Path Traversal 방지
+ * @param {string} path - 타일 경로
+ * @returns {{ valid: boolean, error?: string }}
+ */
+function validatePath(path) {
+  // Path traversal 공격 방지
+  if (path.includes('..') || path.includes('//')) {
+    return { valid: false, error: 'Invalid path: path traversal not allowed' };
   }
+  // 허용된 경로 패턴만 허용 (타일 경로)
+  const validPattern = /^\/v2\/radar\/[a-z0-9_]+\/\d+\/\d+\/\d+\/\d+\.png$/i;
+  if (!validPattern.test(path)) {
+    return { valid: false, error: 'Invalid path format' };
+  }
+  return { valid: true };
+}
+
+export default async function handler(req, res) {
+  // CORS 처리 (강화된 버전)
+  if (setCorsHeaders(req, res)) return;
 
   const { path } = req.query;
 
   if (!path) {
     return res.status(400).json({ error: 'Missing path parameter' });
+  }
+
+  // DO-278A SRS-SEC-004: 입력 검증
+  const validation = validatePath(path);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
   }
 
   try {

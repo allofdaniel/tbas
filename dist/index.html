@@ -41,9 +41,13 @@
       (function() {
         function setAppHeight() {
           var vh = window.innerHeight;
-          document.documentElement.style.setProperty('--app-height', vh + 'px');
-          document.documentElement.style.height = vh + 'px';
-          document.body.style.height = vh + 'px';
+          if (document.documentElement) {
+            document.documentElement.style.setProperty('--app-height', vh + 'px');
+            document.documentElement.style.height = vh + 'px';
+          }
+          if (document.body) {
+            document.body.style.height = vh + 'px';
+          }
           var root = document.getElementById('root');
           if (root) root.style.height = vh + 'px';
         }
@@ -58,11 +62,13 @@
         setTimeout(setAppHeight, 1000);
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-CNoEok-h.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/vendor-react-CRB3T2We.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-mapbox-D5-KvoyR.js">
+    <script type="module" crossorigin src="/assets/index-u08C6Fvc.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-common-APx-1rRv.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-DRrLyRa_.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-mapbox-DAFVMetL.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-three-BcvXop4h.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-BjZbkali.css">
+    <link rel="stylesheet" crossorigin href="/assets/vendor-mapbox-BTr1OiDZ.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-C03hHGfa.css">
   </head>
   <body>
     <div id="root"></div>

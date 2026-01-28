@@ -5,6 +5,9 @@
 import React from 'react';
 import { formatUTC, formatKST } from '../utils/format';
 import type { MetarData, ParsedMetar } from '../utils/weather';
+import type { DataHealthStatus } from '../hooks/useAircraftData';
+import type { WeatherHealthStatus } from '../hooks/useWeatherData';
+import type { NotamHealthStatus } from '../hooks/useNotamData';
 
 interface WeatherDataState {
   metar: MetarData | null;
@@ -43,6 +46,9 @@ interface TafPopupProps {
 interface TimeWeatherBarProps {
   currentTime: Date;
   weatherData: WeatherDataState | null;
+  dataHealth?: DataHealthStatus;
+  weatherHealth?: WeatherHealthStatus;
+  notamHealth?: NotamHealthStatus;
   showMetarPopup: boolean;
   setShowMetarPopup: (show: boolean) => void;
   metarPinned: boolean;
@@ -54,6 +60,93 @@ interface TimeWeatherBarProps {
   parseMetar: (metar: MetarData) => ParsedMetar;
   parseMetarTime: (metar: MetarData) => string;
 }
+
+/**
+ * Health Indicator
+ * 데이터 피드 상태 표시 (ADS-B + METAR + NOTAM)
+ */
+interface HealthIndicatorProps {
+  dataHealth?: DataHealthStatus;
+  weatherHealth?: WeatherHealthStatus;
+  notamHealth?: NotamHealthStatus;
+}
+
+const HealthIndicator: React.FC<HealthIndicatorProps> = React.memo(({ dataHealth, weatherHealth, notamHealth }) => {
+  // ADS-B 상태
+  const adsbConnected = dataHealth?.isConnected ?? false;
+  const adsbCount = dataHealth?.aircraftCount ?? 0;
+  const adsbLastUpdate = dataHealth?.lastSuccessTime;
+  const adsbTimeSince = adsbLastUpdate ? Math.floor((Date.now() - adsbLastUpdate) / 1000) : null;
+  const adsbStale = adsbTimeSince !== null && adsbTimeSince > 30;
+
+  // METAR 상태
+  const metarConnected = weatherHealth?.isConnected ?? false;
+  const metarSource = weatherHealth?.source;
+  const metarLastUpdate = weatherHealth?.lastSuccessTime;
+  const metarTimeSince = metarLastUpdate ? Math.floor((Date.now() - metarLastUpdate) / 1000) : null;
+  const metarStale = metarTimeSince !== null && metarTimeSince > 600; // 10분 이상이면 stale
+
+  // NOTAM 상태
+  const notamConnected = notamHealth?.isConnected ?? false;
+  const notamCount = notamHealth?.notamCount ?? 0;
+  const notamSource = notamHealth?.source;
+  const notamLastUpdate = notamHealth?.lastSuccessTime;
+  const notamTimeSince = notamLastUpdate ? Math.floor((Date.now() - notamLastUpdate) / 1000) : null;
+  const notamStale = notamTimeSince !== null && notamTimeSince > 1800; // 30분 이상이면 stale
+
+  // 색상 결정
+  const getColor = (connected: boolean, stale: boolean) => {
+    if (!connected) return '#ff4444';
+    if (stale) return '#ffaa00';
+    return '#00ff00';
+  };
+
+  const adsbColor = getColor(adsbConnected, adsbStale);
+  const metarColor = getColor(metarConnected, metarStale);
+  const notamColor = getColor(notamConnected, notamStale);
+
+  return (
+    <div className="health-indicator">
+      {/* ADS-B 상태 */}
+      <div
+        className="health-item"
+        title={`ADS-B 피드\n항공기: ${adsbCount}대\n${adsbLastUpdate ? `업데이트: ${adsbTimeSince}초 전` : '대기 중'}`}
+      >
+        <span
+          className="health-dot"
+          style={{ backgroundColor: adsbColor, boxShadow: `0 0 6px ${adsbColor}` }}
+        />
+        <span className="health-label">ADS-B</span>
+        <span className="health-count">{adsbCount}</span>
+      </div>
+
+      {/* METAR 상태 */}
+      <div
+        className="health-item"
+        title={`METAR 데이터\n소스: ${metarSource || '없음'}\n${metarLastUpdate ? `업데이트: ${Math.floor(metarTimeSince! / 60)}분 전` : '대기 중'}`}
+      >
+        <span
+          className="health-dot"
+          style={{ backgroundColor: metarColor, boxShadow: `0 0 6px ${metarColor}` }}
+        />
+        <span className="health-label">WX</span>
+      </div>
+
+      {/* NOTAM 상태 */}
+      <div
+        className="health-item"
+        title={`NOTAM 데이터\n${notamCount}건\n소스: ${notamSource || '없음'}\n${notamLastUpdate ? `업데이트: ${Math.floor(notamTimeSince! / 60)}분 전` : '대기 중'}`}
+      >
+        <span
+          className="health-dot"
+          style={{ backgroundColor: notamColor, boxShadow: `0 0 6px ${notamColor}` }}
+        />
+        <span className="health-label">NOTAM</span>
+      </div>
+    </div>
+  );
+});
+HealthIndicator.displayName = 'HealthIndicator';
 
 /**
  * Time Display
@@ -186,6 +279,9 @@ const TafPopup: React.FC<TafPopupProps> = ({ weatherData, showTafPopup, tafPinne
 const TimeWeatherBar: React.FC<TimeWeatherBarProps> = React.memo(({
   currentTime,
   weatherData,
+  dataHealth,
+  weatherHealth,
+  notamHealth,
   showMetarPopup,
   setShowMetarPopup,
   metarPinned,
@@ -200,6 +296,7 @@ const TimeWeatherBar: React.FC<TimeWeatherBarProps> = React.memo(({
   return (
     <div className="time-weather-display">
       <TimeDisplay currentTime={currentTime} />
+      <HealthIndicator dataHealth={dataHealth} weatherHealth={weatherHealth} notamHealth={notamHealth} />
       <WeatherCompact
         weatherData={weatherData}
         metarPinned={metarPinned}
